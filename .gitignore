@@ -1,6 +1,8 @@
 # compiled files
 lib/**/*.js
 lib/**/*.d.ts
+spec/**/*.js
+spec/**/*.d.ts
 
 # type definitions
 typings/

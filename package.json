@@ -2,9 +2,11 @@
   "name": "rcon-client",
   "version": "1.0.0",
   "description": "A node js RCON client made for minecraft",
-  "main": "index.js",
+  "main": "lib/rcon",
+  "typings": "lib/rcon",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "tsc",
+    "test": "jasmine"
   },
   "repository": {
     "type": "git",
