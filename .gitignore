@@ -1,3 +1,10 @@
+# compiled files
+lib/**/*.js
+lib/**/*.d.ts
+
+# type definitions
+typings/
+
 # node js
 node_modules/
 log/

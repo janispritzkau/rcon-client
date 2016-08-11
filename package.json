@@ -22,5 +22,8 @@
   "bugs": {
     "url": "https://gitlab.com/janispritzkau/rcon-client/issues"
   },
-  "homepage": "https://gitlab.com/janispritzkau/rcon-client#README"
+  "homepage": "https://gitlab.com/janispritzkau/rcon-client#README",
+  "dependencies": {
+    "event-kit": "^2.1.0"
+  }
 }
