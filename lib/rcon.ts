@@ -1,4 +1,4 @@
-import {Emitter} from "event-kit"
+import {Emitter, Disposable} from "event-kit"
 import {Socket, createConnection} from "net"
 
 import {Packet} from "./packet"
@@ -269,7 +269,7 @@ export class Rcon {
   }
 }
 
-interface RconConnectOptions {
+export interface RconConnectOptions {
   host?: string
   port?: number
   password: string

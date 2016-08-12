@@ -5,7 +5,8 @@
   "main": "lib/rcon",
   "typings": "lib/rcon",
   "scripts": {
-    "compile": "tsc",
+    "prepublish": "npm run compile",
+    "compile": "tsc --skipLibCheck",
     "test": "jasmine"
   },
   "repository": {

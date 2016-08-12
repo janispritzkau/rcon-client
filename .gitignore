@@ -10,4 +10,4 @@ typings/
 # node js
 node_modules/
 log/
-.log
+*.log
