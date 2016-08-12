@@ -1,0 +1,9 @@
+.npmignore
+.gitignore
+node_modules/
+typings/
+*.ts
+tsconfig.json
+typings.json
+/examples/
+/spec/
