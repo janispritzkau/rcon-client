@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "event-kit": "registry:npm/event-kit#2.0.0+20160723033700"
+  },
+  "globalDependencies": {
+    "node": "registry:dt/node#6.0.0+20160807145350"
   }
 }

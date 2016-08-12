@@ -2,10 +2,11 @@
   "compilerOptions": {
     "target": "es6",
     "module": "commonjs",
-    "declaration": false
+    "declaration": true
   },
   "exclude": [
     "node_modules",
-    "spec"
+    "spec",
+    "examples"
   ]
 }

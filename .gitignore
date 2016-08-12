@@ -2,7 +2,7 @@
 lib/**/*.js
 lib/**/*.d.ts
 spec/**/*.js
-spec/**/*.d.ts
+examples/**/*.js
 
 # type definitions
 typings/
