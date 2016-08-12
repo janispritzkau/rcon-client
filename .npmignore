@@ -3,6 +3,7 @@
 node_modules/
 typings/
 *.ts
+!*.d.ts
 tsconfig.json
 typings.json
 /examples/

@@ -1,6 +1,6 @@
 {
   "name": "rcon-client",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "A node js RCON client made for minecraft",
   "main": "lib/rcon",
   "typings": "lib/rcon",
