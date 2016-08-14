@@ -5,6 +5,7 @@
     "declaration": true
   },
   "exclude": [
+    "lib/**/*.d.ts",
     "node_modules",
     "spec",
     "examples"

@@ -58,7 +58,7 @@ export class Rcon {
     return this.emitter.on("did-connect", callback)
   }
 
-  public onDidAuthentificate(callback: () => any) {
+  public onDidAuthenticate(callback: () => any) {
     return this.emitter.on("did-authenticate", callback)
   }
 
@@ -251,7 +251,7 @@ export class Rcon {
     if (this.authenticated) {
       setResponseTimeout()
     } else {
-      let e = this.onDidAuthentificate(() => {
+      let e = this.onDidAuthenticate(() => {
         setResponseTimeout()
         e.dispose()
       })

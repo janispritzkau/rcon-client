@@ -49,13 +49,24 @@ Some examples are in the [`examples/`](examples/) folder.
 
 ### Methods
 
+- `connect(options: RconConnectOptions): Promise<any>` Connect client to the server
+  Promise will be resolved when connected and authenticated to the server.
+  - `options.password`
+  - `options.host` (default: `"localhost"`)
+  - `options.port` (default: `25575`)
+- `disconnect()` Ends the socket to the server.
+- `send(command: string, callback?: (response: string) => any)`
+  Sends a command to the server and calls the callback function if defined.
+
+
 - `onDidConnect(callback: () => any)` Client connected to server.
-- `onDidAuthentificate(callback: () => any)` Client authenticated with server.
+- `onDidAuthenticate(callback: () => any)` Client authenticated with server.
 - `onDidDisconnect(callback: () => any)` Connection closed to server.
 - `onError(callback: (error: Error) => any)` Rcon class error.
 
 ### Properties
 
 - `socket: Socket` A net.Socket instance. Only exist when connected.
-- `connected: boolean`
-- `authenticated: boolean`
+- `connected: boolean` If the socket is connected.
+- `authenticated: boolean` If the server is connected and has sent
+  back a positive authentication packet.
