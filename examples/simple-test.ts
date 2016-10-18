@@ -1,37 +1,29 @@
 // This test requires a minecraft server started with rcon
 // enabled on port 25575 and the following password
 
-const password = "e3IuiM9DFyEC"
+const password = "password"
 
-import {Rcon, Packet} from "../lib/rcon"
+import {Rcon} from "../lib/rcon"
 
-let rcon = new Rcon
-
-rcon.connect({port: 25575, password})
-.then(() => console.log("Connected"))
-.catch((error) => console.log(error.message))
-
-function getAllHelpPages(): Promise<string[]> {
-  let helpPages: string[] = []
-  return new Promise((resolve, reject) => {
-    for (let i = 1; i <= 9; i++) {
-      rcon.send(`help ${i}`, response => {
-        helpPages.push(response)
-        if (i == 9) {
-          rcon.disconnect()
-          resolve(helpPages)
-        }
-      })
-    }
-  })
+const connectOptions = {
+  host: "localhost", port: 25575, password
 }
 
-getAllHelpPages().then(helpPages => {
-  helpPages.forEach(helpPage => console.log(helpPage.slice(0, 96) + " .."))
-}).then(() => {
-  rcon.send("list", (res) => {
-    console.log(res)
+const rcon = new Rcon
+
+rcon.onDidConnect(() => console.log("Client connected"))
+rcon.onDidAuthenticate(() => console.log("Client authenticated"))
+rcon.onDidDisconnect(() => console.log("Client disconnected"))
+
+rcon.send("list").then(console.log)
+
+rcon.connect(connectOptions)
+.catch(e => console.error("Couldn't connect:", e))
+.then(() => {
+  Promise.all([1, 2, 3, 4, 5, 6, 7, 8, 9].map(a => rcon.send(`help ${a}`)))
+  .then(helpPages => {
+    console.log("===== All help pages =====")
+    console.log(helpPages.map(a => a.slice(0, 80) + " .."))
     rcon.disconnect()
   })
-  rcon.connect({port: 25575, password})
 })

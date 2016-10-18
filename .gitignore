@@ -5,7 +5,8 @@ spec/**/*.js
 examples/**/*.js
 
 # type definitions
-typings/
+typings/globals/
+typings/modules/
 
 # node js
 node_modules/

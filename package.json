@@ -1,7 +1,7 @@
 {
   "name": "rcon-client",
-  "version": "2.1.0",
-  "description": "A node js RCON client made for minecraft",
+  "version": "3.0.0",
+  "description": "A Node JS RCON client made for minecraft",
   "main": "lib/rcon",
   "typings": "lib/rcon",
   "scripts": {

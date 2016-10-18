@@ -1,276 +1,212 @@
-import {Emitter, Disposable} from "event-kit"
 import {Socket, createConnection} from "net"
+import {Emitter, Disposable} from "event-kit"
 
-import {Packet} from "./packet"
-export {Packet}
-
-export type RconSendCallback = (response: string) => any
-
-export interface RconOptions {
-  timeout?: number
-}
+import {decodePacket, encodePacket, PacketType, IPacket} from "./packet"
+import {createSplitter} from "./splitter"
+import {PromiseQueue} from "./utils/queue"
 
 export class Rcon {
-  emitter = new Emitter
-  options: RconOptions
-  connectOptions: RconConnectOptions
+  private options = {
+    packetResponseTimeout: 1000
+  }
+  private emitter = new Emitter()
+  private sendPacketQueue: PromiseQueue
+  private socket: Socket
 
-  requestId: number
-  socket: Socket
+  /** @hidden */
+  requestId = 0
+  /** @hidden */
   connecting: boolean
+  /** @hidden */
   authenticated: boolean
 
-  get connected() {
-    return this.socket != null && this.socket.writable
-  }
+  /**
+    @param options.timeout Timeout of the command responses in milliseconds.
+    Defaults to `500`.
+    @param options.autoReconnect Should the client automatically try to reconnect
+    if the connection was unexpectedly closed?
+  */
+  constructor(options?: {packetResponseTimeout?: number}) {
+    if (options)
+      this.options = Object.assign(this.options, options)
 
-  private resolveConnectPromise: () => any
-  private rejectConnectPromise: (err: Error) => any
-
-  private callbackQueue: {[index: number]: RconSendCallback}
-  private sendQueue: Buffer[]
-  private processingSendQueue: boolean
-
-  constructor(options: RconOptions = {}) {
-    this.options = {
-      timeout: options.timeout || 500
-    }
-    this.reset()
-  }
-
-  public reset() {
-    this.requestId = 0
-    this.authenticated = false
-    this.connecting = false
-
-    this.callbackQueue = {}
-    this.sendQueue = []
-    this.processingSendQueue = false
-
-    this.socket = null
+    this.sendPacketQueue = new PromiseQueue({maxConcurrent: 1})
   }
 
   /*
     Section: Event Subscription
   */
 
-  public onDidConnect(callback: () => any) {
+  /**
+    Call your callback function when the client has connected to the server.
+  */
+  onDidConnect(callback: () => any) {
     return this.emitter.on("did-connect", callback)
   }
 
-  public onDidAuthenticate(callback: () => any) {
+  /**
+    Call your callback function when the client has authenticated with the server.
+  */
+  onDidAuthenticate(callback: () => any) {
     return this.emitter.on("did-authenticate", callback)
   }
 
-  public onDidDisconnect(callback: () => any) {
+  /**
+    Call your callback function when the client was disconnected with the server.
+  */
+  onDidDisconnect(callback: () => any) {
     return this.emitter.on("did-disconnect", callback)
   }
 
-  public onError(callback: (error: Error) => any) {
-    return this.emitter.on("error", callback)
-  }
-
   /*
-    Section: General public methods
+    Section: Public methods
   */
 
-  public connect(options: RconConnectOptions): Promise<any> {
-    if (this.connected && this.authenticated) return Promise.resolve()
+  /**
+    Connect and authenticate with the server.
 
-    options = this.connectOptions = {
-      host: options.host || "localhost",
-      port: options.port || 25575,
-      password: options.password
-    }
+    @returns A promise that will be resolved when the client is authenticated
+    with the server.
+  */
+  connect(options: {host: string, port: number, password: string}) {
+    if (this.authenticated) return Promise.resolve()
 
-    let onConnected = () => {
-      this.connecting = false
-      this.emitter.emit("did-connect", null)
+    const {host, port, password} = options
 
-      if (!this.socket) return
+    const promise = new Promise<any>((resolve, reject) => {
+      const onConnected = () => {
+        this.emitter.emit("did-connect", null)
+        this.socket.removeListener("error", connectErrorHandler)
+        this.subscribeToSocketEvents()
+        this.connecting = false
 
-      let authPacket = Packet.encode({
-        id: 0,
-        body: options.password,
-        type: Packet.TYPE_SERVERDATA_AUTH
-      })
+        this.sendPacketQueue.resume()
 
-      this.socket.write(authPacket)
-    }
-
-    this.socket = createConnection({
-      host: options.host,
-      port: options.port
-    }, onConnected)
-
-    this.connecting = true
-    this.subscribeToSocketEvents()
-
-    return new Promise((resolve, reject) => {
-      let onError = this.onError(error => {
-        reject(error)
-        clear()
-      })
-      let timeout = setTimeout(() => {
-        let error = new Error("Timeout")
-        error.name = "TimeoutError"
-        reject(error)
-      }, 2000)
-      let clear = () => {
-        clearTimeout(timeout)
-        onError.dispose()
+        const id = this.requestId
+        this.sendPacket(PacketType.Auth, options.password, true)
+        .then((packet) => {
+          if (packet.id != id || packet.id == -1) return reject(new Error("Authentication failed: wrong password"))
+          // auth success
+          this.authenticated = true
+          this.emitter.emit("did-authenticate", null)
+          resolve()
+        })
       }
-      this.resolveConnectPromise = () => {clear(); resolve()}
-      this.rejectConnectPromise = (error) => {clear(); reject(error)}
+
+      this.socket = createConnection({host, port}, onConnected)
+
+      const connectErrorHandler = err => reject(err)
+      this.socket.on("error", connectErrorHandler)
+
+      this.connecting = true
     })
+
+    return promise
   }
 
-  public disconnect() {
-    let end = () => {
-      this.socket.end()
-      this.authenticated = false
-      this.socket = null
-      this.emitter.emit("did-disconnect", null)
-    }
+  /**
+    Close the connection to the server.
+  */
+  disconnect() {
+    // half close the socket
+    this.socket.end()
+    this.authenticated = false
+    this.sendPacketQueue.pause()
 
-    if (this.connecting) {
-      let didConnect = this.onDidConnect(() => {
-        end()
-        didConnect.dispose()
+    return new Promise<any>((resolve, reject) => {
+      const listener = this.onDidDisconnect(() => {
+        resolve()
+        listener.dispose()
       })
-    }
-    else end()
-  }
-
-  // alias for ::disconnect
-  public end() {
-    this.disconnect()
-  }
-
-  public send(command: string, callback?: RconSendCallback) {
-    let id = this.requestId++
-
-    let packet = Packet.encode({
-      id: id,
-      type: Packet.TYPE_SERVERDATA_EXECCOMMAND,
-      body: command
     })
+  }
 
-    this.sendQueue.push(packet)
-    this.processSendQueue()
+  /** Alias for [[Rcon.disconnect]] */
+  end() {
+    return this.disconnect()
+  }
 
-    this.addCallbackHandler(id, callback)
+  /**
+    Send a command to the server.
+
+    @param command The command that will be executed on the server.
+    @returns A promise that will be resolved with the command's response from the server.
+  */
+  send(command: string) {
+    return this.sendPacket(PacketType.Command, command)
+    .then(packet => packet.payload)
   }
 
   /*
-    Section: Private methods
+    Section: Private methods for handling with packets
   */
+
+  /**
+    Send a raw packet to the server and handle the response packet. If there is no
+    connection at the moment it'll wait until the server is authenticated the next time.
+
+    We have to queue the packets before they're sent because the minecraft server can't
+    handle 4 or more simultaneously sent rcon packets.
+  */
+  private sendPacket(type: number, payload: string, isAuth = false) {
+    const id = this.requestId++
+
+    const createPacketResponsePromise = () => new Promise<IPacket>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        packetListener.dispose()
+        reject(new Error(`Response timeout for packet id ${id}`))
+      }, this.options.packetResponseTimeout)
+
+      const packetListener = this.onPacket(packet => {
+        if (!isAuth && packet.id == id || isAuth) {
+          clearTimeout(timeout)
+          packetListener.dispose()
+          resolve(packet)
+        }
+      })
+    })
+
+    const createQueuedPromise = () => this.sendPacketQueue.add(() => {
+      this.socket.write(encodePacket({id, type, payload}))
+      return createPacketResponsePromise()
+    })
+
+    if (isAuth || this.authenticated) {
+      return createQueuedPromise()
+    } else {
+      return new Promise<IPacket>((resolve, reject) => {
+        const listener = this.onDidAuthenticate(() => {
+          resolve()
+          listener.dispose()
+        })
+      })
+      .then(createQueuedPromise)
+    }
+  }
+
+  private onPacket(callback: (packet: IPacket) => any) {
+    return this.emitter.on("packet", (packet: IPacket) => {
+      callback(packet)
+    })
+  }
 
   private subscribeToSocketEvents() {
-    this.socket.on("end", () => {
+    this.socket.on("close", () => {
       this.authenticated = false
-      this.connecting = false
-      this.emitter.emit("disconnected", null)
+      this.sendPacketQueue.pause()
+      this.socket = null
+      this.emitter.emit("did-disconnect", null)
     })
 
     this.socket.on("error", error => {
-      this.emitter.emit("error", error)
-      if (this.connecting) {
-        this.connecting = false
-      }
-      setTimeout(() => this.disconnect())
+      throw error
     })
 
-    this.socket.on("data", data => {
-      let packets = Packet.decode(data)
-      packets.forEach((packet) => this.processPacket(packet))
+    this.socket
+    // Split incoming data into packets
+    .pipe(createSplitter())
+    .on("data", (data: Buffer) => {
+      this.emitter.emit("packet", decodePacket(data))
     })
   }
-
-  /*
-    Section: Private Queue Methods
-  */
-
-  private processSendQueue() {
-    if (!this.authenticated || this.processingSendQueue || this.sendQueue.length == 0)
-    return
-
-    let stopQueueProcessing = () => {
-      clearInterval(interval)
-    }
-
-    let i = 0
-    let interval = setInterval(() => {
-      if (!this.connected || !this.authenticated) return stopQueueProcessing()
-
-      const buffer = this.sendQueue.shift()
-      if (!buffer) return stopQueueProcessing()
-
-      this.socket.write(buffer)
-      i++
-    }, 0)
-  }
-
-  private processPacket(packet: Packet) {
-    if (packet.type == Packet.TYPE_SERVERDATA_AUTH_RESPONSE) {
-      if (packet.id == -1) {
-        let authError = new Error(`Wrong password for ${this.connectOptions.host}:${this.connectOptions.port}`)
-        authError.name = "AuthError"
-        if (this.rejectConnectPromise) this.rejectConnectPromise(authError)
-        this.rejectConnectPromise = null
-        this.resolveConnectPromise = null
-        this.emitter.emit("error", authError)
-        this.end()
-      } else {
-        this.authenticated = true
-        if (this.resolveConnectPromise) this.resolveConnectPromise()
-        this.rejectConnectPromise = null
-        this.resolveConnectPromise = null
-        this.emitter.emit("did-authenticate", null)
-        this.processSendQueue()
-      }
-    } else {
-      this.processCallbackQueue(packet)
-    }
-  }
-
-  private addCallbackHandler(id: number, callback?: RconSendCallback) {
-    this.callbackQueue[id] = callback || null
-
-    let setResponseTimeout = () => {
-      setTimeout(() => {
-        if (this.callbackQueue[id] === undefined) return
-        this.emitter.emit("error", (() => {
-          let error = new Error("Timeout for response for packet id " + id)
-          error.name = "TimeoutError"
-          return error
-        })())
-      }, this.options.timeout)
-    }
-
-    if (this.authenticated) {
-      setResponseTimeout()
-    } else {
-      let e = this.onDidAuthenticate(() => {
-        setResponseTimeout()
-        e.dispose()
-      })
-    }
-  }
-
-  private processCallbackQueue(packet: Packet) {
-    let handler = this.callbackQueue[packet.id]
-
-    if (handler instanceof Function)
-    handler(packet.body)
-
-    if (handler !== undefined)
-    delete this.callbackQueue[packet.id]
-  }
-}
-
-export interface RconConnectOptions {
-  host?: string
-  port?: number
-  password: string
 }

@@ -1,42 +1,38 @@
-
-export class Packet {
-  static TYPE_SERVERDATA_AUTH = 0x03
-  static TYPE_SERVERDATA_AUTH_RESPONSE = 0x02
-  static TYPE_SERVERDATA_EXECCOMMAND = 0x02
-  static TYPE_SERVERDATA_RESPONSE_VALUE = 0x00
-
-  static encode(packet: Packet): Buffer {
-    const {id, type, body} = packet
-    const size = Buffer.byteLength(body) + 14
-    const buffer = new Buffer(size)
-
-    buffer.writeInt32LE(size - 4, 0)
-    buffer.writeInt32LE(id, 4)
-    buffer.writeInt32LE(type, 8)
-    buffer.write(body + "\x00\x00", 12, size - 2, "ascii")
-    return buffer
-  }
-
-  static decode(buffer: Buffer): Packet[] {
-    let responsePackets: Packet[] = []
-
-    let size: number
-    let offset = 0
-
-    while (true) {
-      if (buffer[offset] == undefined) break
-      size = buffer.readInt32LE(offset + 0)
-      let id = buffer.readInt32LE(offset + 4)
-      let type = buffer.readInt32LE(offset + 8)
-      let body = buffer.toString("ascii", offset + 12, size + 2)
-      responsePackets.push({id, type, body})
-      offset += 4 + size
-    }
-
-    return responsePackets
-  }
-
+export interface IPacket {
   id: number
   type: number
-  body: string
+  payload: string
+}
+
+export function encodePacket(packet: IPacket): Buffer {
+  const payloadSize = Buffer.byteLength(packet.payload, "ascii")
+  const packetSize = payloadSize + 10
+
+  const buffer = Buffer.allocUnsafe(packetSize + 4)
+
+  buffer.writeInt32LE(packetSize, 0)
+  buffer.writeInt32LE(packet.id, 4)
+  buffer.writeInt32LE(packet.type, 8)
+  buffer.write(packet.payload, 12, packetSize + 2, "ascii")
+  buffer.fill(0x00, payloadSize + 12)
+
+  return buffer
+}
+
+export function decodePacket(buffer: Buffer, offset = 0): IPacket {
+  const length = buffer.readInt32LE(offset)
+  const id = buffer.readInt32LE(offset + 4)
+  const type = buffer.readInt32LE(offset + 8)
+  const payload = buffer.toString("ascii", offset + 12, length + 2)
+
+  return {
+    id, type, payload
+  }
+}
+
+export enum PacketType {
+  Auth = 3,
+  AuthResponse = 2,
+  Command = 2,
+  CommandResponse = 0
 }
