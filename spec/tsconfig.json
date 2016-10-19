@@ -3,7 +3,7 @@
     "target": "es6"
   },
   "filesGlob": [
-    "**/*",
-    "../typings/index.d.ts"
+    "**/*.ts",
+    "../typings/spec.d.ts"
   ]
 }

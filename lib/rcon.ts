@@ -21,12 +21,11 @@ export class Rcon {
   authenticated: boolean
 
   /**
-    @param options.timeout Timeout of the command responses in milliseconds.
+    @param options.packetResponseTimeout Timeout of the command responses in milliseconds.
     Defaults to `500`.
-    @param options.autoReconnect Should the client automatically try to reconnect
-    if the connection was unexpectedly closed?
+    @param options.resendPacketOnTimeout Should the packet resend if the server hasn't responded.
   */
-  constructor(options?: {packetResponseTimeout?: number}) {
+  constructor(options?: {packetResponseTimeout?: number, resendPacketOnTimeout: boolean}) {
     if (options)
       this.options = Object.assign(this.options, options)
 
@@ -113,7 +112,7 @@ export class Rcon {
     this.authenticated = false
     this.sendPacketQueue.pause()
 
-    return new Promise<any>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const listener = this.onDidDisconnect(() => {
         resolve()
         listener.dispose()

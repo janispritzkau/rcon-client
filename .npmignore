@@ -1,10 +1,6 @@
-.npmignore
-.gitignore
-node_modules/
-typings/
-*.ts
-!*.d.ts
-tsconfig.json
-typings.json
-/examples/
-/spec/
+**/*
+!lib/**/*.d.ts
+!lib/**/*.js
+
+!package.json
+!README.md

@@ -2,11 +2,11 @@
   "compilerOptions": {
     "target": "es6",
     "module": "commonjs",
-    "declaration": true,
-    "skipLibCheck": true
+    "declaration": true
   },
   "filesGlob": [
     "lib/**/*.ts",
+    "!lib/**/*.d.ts",
     "typings/index.d.ts"
   ],
   "exclude": [

@@ -1,12 +1,12 @@
 {
   "name": "rcon-client",
   "version": "3.0.0",
-  "description": "A Node JS RCON client made for minecraft",
+  "description": "A simple RCON client made for Minecraft.",
   "main": "lib/rcon",
   "typings": "lib/rcon",
   "scripts": {
     "prepublish": "npm run compile",
-    "compile": "tsc --skipLibCheck",
+    "compile": "tsc --project tsconfig.json --skipLibCheck",
     "test": "jasmine"
   },
   "repository": {
