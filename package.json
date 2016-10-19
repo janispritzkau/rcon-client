@@ -6,6 +6,7 @@
   "typings": "lib/rcon",
   "scripts": {
     "prepublish": "npm run compile",
+    "install-typings": "typings install",
     "build": "npm run compile && tsc -p spec --skipLibCheck",
     "compile": "tsc --skipLibCheck",
     "test": "jasmine"
