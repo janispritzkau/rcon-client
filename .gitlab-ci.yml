@@ -2,16 +2,8 @@ image: node:latest
 
 before_script:
   - npm install
-
-stages:
-  - test
-
-build:
-  state: build
-  script:
-    - npm run build
+  - npm run build
 
 test:
-  state: test
   script:
     - npm run test

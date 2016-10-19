@@ -29,5 +29,10 @@
   "homepage": "https://gitlab.com/janispritzkau/rcon-client#README",
   "dependencies": {
     "event-kit": "^2.1.0"
+  },
+  "devDependencies": {
+    "jasmine": "^2.5.2",
+    "typescript": "^2.0.3",
+    "typings": "^1.4.0"
   }
 }
