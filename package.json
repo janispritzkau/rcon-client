@@ -6,7 +6,8 @@
   "typings": "lib/rcon",
   "scripts": {
     "prepublish": "npm run compile",
-    "compile": "tsc --project tsconfig.json --skipLibCheck",
+    "build": "npm run compile && tsc -p spec --skipLibCheck",
+    "compile": "tsc --skipLibCheck",
     "test": "jasmine"
   },
   "repository": {

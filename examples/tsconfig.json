@@ -1,9 +1,15 @@
 {
   "compilerOptions": {
-    "target": "es6"
+    "target": "es6",
+    "module": "commonjs"
   },
   "filesGlob": [
-    "**/*",
+    "**/*.ts",
     "../typings/index.d.ts"
+  ],
+  "files": [
+    "../typings/index.d.ts",
+    "big-test.ts",
+    "simple-test.ts"
   ]
 }

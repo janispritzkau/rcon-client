@@ -2,16 +2,19 @@
   "compilerOptions": {
     "target": "es6",
     "module": "commonjs",
-    "declaration": true
+    "declaration": true,
+    "removeComments": true
   },
   "filesGlob": [
     "lib/**/*.ts",
     "!lib/**/*.d.ts",
     "typings/index.d.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "examples",
-    "spec"
+  "files": [
+    "typings/index.d.ts",
+    "lib/packet.ts",
+    "lib/rcon.ts",
+    "lib/splitter.ts",
+    "lib/utils/queue.ts"
   ]
 }
