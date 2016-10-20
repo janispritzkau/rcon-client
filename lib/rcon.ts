@@ -13,8 +13,7 @@ export class Rcon {
   private sendPacketQueue: PromiseQueue
   private socket: Socket
 
-  /** @hidden */
-  requestId = 0
+  private requestId = 0
   /** @hidden */
   connecting: boolean
   /** @hidden */
@@ -23,9 +22,8 @@ export class Rcon {
   /**
     @param options.packetResponseTimeout Timeout of the command responses in milliseconds.
     Defaults to `500`.
-    @param options.resendPacketOnTimeout Should the packet resend if the server hasn't responded.
   */
-  constructor(options?: {packetResponseTimeout?: number, resendPacketOnTimeout: boolean}) {
+  constructor(options?: {packetResponseTimeout?: number}) {
     if (options)
       this.options = Object.assign(this.options, options)
 
