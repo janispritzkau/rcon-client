@@ -18,6 +18,24 @@
 
 #### connect
 
+`static connect(options?: object): Promise<Rcon>`
+
+Create `Rcon` instance and call the `.connect()` function with options
+
+**Parameters**
+
+- **options**: _object_
+  - **host**: _string_
+  - **password**: _string_
+  - **port**: _number_
+
+**Returns** _Promise&lt;Rcon&gt;_
+A promise that will be resolved after the client is authenticated with the server.
+
+---
+
+#### connect
+
 `connect(options?: object): Promise<void>`
 
 Connect and authenticate with the server.
@@ -30,7 +48,7 @@ Connect and authenticate with the server.
   - **port**: _number_
 
 **Returns** _Promise&lt;void&gt;_
-A promise that will be resolved when the client is authenticated with the server.
+A promise that will be resolved after the client is authenticated with the server.
 
 ---
 

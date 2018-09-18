@@ -4,17 +4,5 @@
     "module": "commonjs",
     "declaration": true,
     "removeComments": true
-  },
-  "filesGlob": [
-    "lib/**/*.ts",
-    "!lib/**/*.d.ts",
-    "typings/index.d.ts"
-  ],
-  "files": [
-    "typings/index.d.ts",
-    "lib/packet.ts",
-    "lib/rcon.ts",
-    "lib/splitter.ts",
-    "lib/utils/queue.ts"
-  ]
+  }
 }

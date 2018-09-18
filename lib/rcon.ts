@@ -1,9 +1,9 @@
-import {Socket, createConnection} from "net"
-import {Emitter, Disposable} from "event-kit"
+import { Socket, createConnection } from "net"
+import { Emitter, Disposable } from "event-kit"
 
-import {decodePacket, encodePacket, PacketType, IPacket} from "./packet"
-import {createSplitter} from "./splitter"
-import {PromiseQueue} from "./utils/queue"
+import { decodePacket, encodePacket, PacketType, IPacket } from "./packet"
+import { createSplitter } from "./splitter"
+import { PromiseQueue } from "./utils/queue"
 
 export class Rcon {
   private options = {
@@ -24,10 +24,22 @@ export class Rcon {
     Defaults to `500`.
   */
   constructor(options?: {packetResponseTimeout?: number}) {
-    if (options)
-      this.options = Object.assign(this.options, options)
+    // overwrite defaults if options provided
+    if (options) this.options = Object.assign(this.options, options)
 
     this.sendPacketQueue = new PromiseQueue({maxConcurrent: 1})
+  }
+
+  /**
+    Create `Rcon` instance and call the `.connect()` function with options
+
+    @returns A promise that will be resolved after the client is authenticated
+    with the server.
+  */
+  static async connect(options: {host: string, port: number, password: string}): Promise<Rcon> {
+    const rcon = new Rcon()
+    await rcon.connect(options)
+    return rcon
   }
 
   /*
@@ -62,55 +74,49 @@ export class Rcon {
   /**
     Connect and authenticate with the server.
 
-    @returns A promise that will be resolved when the client is authenticated
+    @returns A promise that will be resolved after the client is authenticated
     with the server.
   */
-  connect(options: {host: string, port: number, password: string}) {
+  async connect(options: {host: string, port: number, password: string}) {
     if (this.authenticated) return Promise.resolve()
 
     const {host, port, password} = options
 
-    const promise = new Promise<any>((resolve, reject) => {
-      const onConnected = () => {
-        this.emitter.emit("did-connect", null)
-        this.socket.removeListener("error", connectErrorHandler)
-        this.subscribeToSocketEvents()
-        this.connecting = false
+    const connectErrorHandler = err => { throw err }
 
-        this.sendPacketQueue.resume()
-
-        const id = this.requestId
-        this.sendPacket(PacketType.Auth, options.password, true)
-        .then((packet) => {
-          if (packet.id != id || packet.id == -1) return reject(new Error("Authentication failed: wrong password"))
-          // auth success
-          this.authenticated = true
-          this.emitter.emit("did-authenticate", null)
-          resolve()
-        })
-      }
-
-      this.socket = createConnection({host, port}, onConnected)
-
-      const connectErrorHandler = err => reject(err)
-      this.socket.on("error", connectErrorHandler)
-
+    this.socket = await new Promise<Socket>((resolve, reject) => {
+      const socket = createConnection({host, port}, err => err && reject(err) || resolve(socket))
+      socket.on("error", connectErrorHandler)
       this.connecting = true
     })
 
-    return promise
+    this.emitter.emit("did-connect")
+    this.socket.removeListener("error", connectErrorHandler)
+
+    this.subscribeToSocketEvents()
+    this.connecting = false
+
+    this.sendPacketQueue.resume()
+
+    const id = this.requestId
+    let packet = await this.sendPacket(PacketType.Auth, options.password, true)
+    if (packet.id != id || packet.id == -1) throw new Error("Authentication failed: wrong password")
+
+    this.authenticated = true
+    this.emitter.emit("did-authenticate", null)
   }
 
   /**
     Close the connection to the server.
   */
-  disconnect() {
+  async disconnect() {
+    if (!this.socket) return
     // half close the socket
     this.socket.end()
     this.authenticated = false
     this.sendPacketQueue.pause()
 
-    return new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const listener = this.onDidDisconnect(() => {
         resolve()
         listener.dispose()
@@ -119,8 +125,8 @@ export class Rcon {
   }
 
   /** Alias for [[Rcon.disconnect]] */
-  end() {
-    return this.disconnect()
+  async end() {
+    await this.disconnect()
   }
 
   /**
@@ -129,9 +135,10 @@ export class Rcon {
     @param command The command that will be executed on the server.
     @returns A promise that will be resolved with the command's response from the server.
   */
-  send(command: string) {
-    return this.sendPacket(PacketType.Command, command)
-    .then(packet => packet.payload)
+  async send(command: string) {
+    let packet = await this.sendPacket(PacketType.Command, command)
+
+    return packet.payload
   }
 
   /*
@@ -142,10 +149,10 @@ export class Rcon {
     Send a raw packet to the server and handle the response packet. If there is no
     connection at the moment it'll wait until the server is authenticated the next time.
 
-    We have to queue the packets before they're sent because the minecraft server can't
+    We need to queue the packets before they're sent because the minecraft server can't
     handle 4 or more simultaneously sent rcon packets.
   */
-  private sendPacket(type: number, payload: string, isAuth = false) {
+  private async sendPacket(type: number, payload: string, isAuth = false): Promise<IPacket> {
     const id = this.requestId++
 
     const createPacketResponsePromise = () => new Promise<IPacket>((resolve, reject) => {
@@ -163,21 +170,22 @@ export class Rcon {
       })
     })
 
-    const createQueuedPromise = () => this.sendPacketQueue.add(() => {
+    const addPacketToQueue = () => this.sendPacketQueue.add(() => {
       this.socket.write(encodePacket({id, type, payload}))
       return createPacketResponsePromise()
     })
 
     if (isAuth || this.authenticated) {
-      return createQueuedPromise()
+      return addPacketToQueue()
     } else {
-      return new Promise<IPacket>((resolve, reject) => {
+      // wait for authentication
+      await new Promise<IPacket>((resolve, reject) => {
         const listener = this.onDidAuthenticate(() => {
           resolve()
           listener.dispose()
         })
       })
-      .then(createQueuedPromise)
+      return addPacketToQueue()
     }
   }
 

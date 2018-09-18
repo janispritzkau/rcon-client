@@ -17,7 +17,7 @@ export class PromiseQueue {
     this.maxConcurrent = options.maxConcurrent || 1
   }
 
-  add<T>(promiseGenerator: () => Promise<T>) {
+  async add<T>(promiseGenerator: () => Promise<T>) {
     return new Promise<T>((resolve, reject) => {
       this.queue.push({promiseGenerator, resolve, reject})
       if (!this.paused) this.dequeue()
@@ -33,7 +33,7 @@ export class PromiseQueue {
     this.dequeue()
   }
 
-  private dequeue() {
+  private async dequeue() {
     if (this.pendingPromisesCount > this.maxConcurrent || this.paused) return
 
     let item = this.queue.shift()
@@ -43,17 +43,17 @@ export class PromiseQueue {
 
     let onPromiseResolvedOrRejected = () => {
       this.pendingPromisesCount--
+      // finish next item and dequeue it
       this.dequeue()
     }
 
-    item.promiseGenerator()
-    .then(value => {
+    try {
+      const value = await item.promiseGenerator()
       item.resolve(value)
+    } catch (err) {
+      item.reject(err)
+    } finally {
       onPromiseResolvedOrRejected()
-    })
-    .catch(e => {
-      item.reject(e)
-      onPromiseResolvedOrRejected()
-    })
+    }
   }
 }

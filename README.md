@@ -1,38 +1,39 @@
 # rcon-client
 
 A simple RCON client made to work with Minecraft servers for Node.js.
-It's written in Typescript and uses ES6 Promises.
+It's written in Typescript and uses async functions.
 
 ## Installation
 
 ```shell
-npm install --save rcon-client
+npm i --save rcon-client
 ```
 
 ## Basic Usage
 
 ```js
-import {Rcon} from "rcon-client"
+import { Rcon } from "rcon-client"
 
-const rcon = new Rcon()
-
-// the send method can be called before the client is connected
-rcon.send("list").then(response => console.log(response))
-
-rcon.connect({host: "localhost", port: 25525, password: "2xGWv4zSf4"})
-.then(() => {
-  console.log("[Info] Connected")
-
-  Promise.all([
-    rcon.send("help 1"),
-    rcon.send("help 2")
-  ])
-  .then(responses => {
-    console.log(`Help pages:\n`, responses)
-    return rcon.disconnect()
-  })
-  .then(() => console.log("[Info] Disconnected"))
+const rcon = await Rcon.connect({
+  host: "localhost", port: 25575,
+  password: "password"
 })
+
+console.log("Connected")
+
+let listResponse = await rcon.send("list")
+console.log(listResponse)
+
+let responses = await Promise.all([
+  rcon.send("help"),
+  rcon.send("whitelist list")
+])
+
+for (response of responses) {
+  console.log(response)
+}
+
+rcon.end()
 ```
 
 More examples are in the [`examples/`](examples/) folder.

@@ -1,39 +1,41 @@
 {
-  "name": "rcon-client",
-  "version": "3.0.1",
-  "description": "A simple RCON client made for Minecraft.",
-  "main": "lib/rcon",
-  "typings": "lib/rcon",
-  "scripts": {
-    "prepublish": "npm run compile",
-    "install-typings": "typings install",
-    "build": "npm run compile && tsc -p spec --skipLibCheck",
-    "compile": "tsc --skipLibCheck",
-    "test": "jasmine"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://gitlab.com/janispritzkau/rcon-client.git"
-  },
-  "keywords": [
-    "rcon",
-    "client",
-    "minecraft",
-    "server",
-    "protocol"
-  ],
-  "author": "Janis <janis@pritzkau.de> (http://janis.pritzkau.de)",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://gitlab.com/janispritzkau/rcon-client/issues"
-  },
-  "homepage": "https://gitlab.com/janispritzkau/rcon-client#README",
-  "dependencies": {
-    "event-kit": "^2.1.0"
-  },
-  "devDependencies": {
-    "jasmine": "^2.5.2",
-    "typescript": "^2.0.3",
-    "typings": "^1.4.0"
-  }
+    "name": "rcon-client",
+    "version": "3.1.1",
+    "description": "A simple RCON client made for Minecraft.",
+    "main": "lib/rcon",
+    "typings": "lib/rcon",
+    "scripts": {
+        "prepublish": "npm run compile",
+        "build": "npm run compile && tsc -p spec --skipLibCheck",
+        "compile": "tsc --skipLibCheck",
+        "test": "jasmine"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/janispritzkau/rcon-client.git"
+    },
+    "keywords": [
+        "rcon",
+        "client",
+        "promise",
+        "minecraft",
+        "server",
+        "protocol"
+    ],
+    "author": "Janis <janispritzkau@gmail.com>",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://gitlab.com/janispritzkau/rcon-client/issues"
+    },
+    "homepage": "https://gitlab.com/janispritzkau/rcon-client#README",
+    "dependencies": {
+        "event-kit": "^2.1.0"
+    },
+    "devDependencies": {
+        "@types/event-kit": "^2.4.0",
+        "@types/jasmine": "^2.8.8",
+        "@types/node": "^10.10.1",
+        "jasmine": "^3.2.0",
+        "typescript": "2.9"
+    }
 }

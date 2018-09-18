@@ -2,7 +2,6 @@ image: node:latest
 
 before_script:
   - npm install
-  - npm run install-typings
   - npm run build
 
 test:

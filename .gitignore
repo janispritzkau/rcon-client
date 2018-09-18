@@ -1,12 +1,6 @@
 # compiled files
-lib/**/*.js
-lib/**/*.d.ts
-spec/**/*.js
-examples/**/*.js
-
-# type definitions
-typings/globals/
-typings/modules/
+**/*.js
+**/*.d.ts
 
 # node js
 node_modules/

@@ -1,29 +1,30 @@
 // This test requires a minecraft server started with rcon
-// enabled on port 25575 and the following password
-
-const password = "password"
+// enabled on port 25575 and 'password' as password
 
 import {Rcon} from "../lib/rcon"
 
 const connectOptions = {
-  host: "localhost", port: 25575, password
+  host: "localhost", port: 25575, password: "password"
 }
 
-const rcon = new Rcon
+async function main() {
+  const rcon = await Rcon.connect(connectOptions)
 
-rcon.onDidConnect(() => console.log("Client connected"))
-rcon.onDidAuthenticate(() => console.log("Client authenticated"))
-rcon.onDidDisconnect(() => console.log("Client disconnected"))
+  console.log("Connected")
 
-rcon.send("list").then(console.log)
+  let listResponse = await rcon.send("list")
+  console.log(listResponse)
 
-rcon.connect(connectOptions)
-.catch(e => console.error("Couldn't connect:", e))
-.then(() => {
-  Promise.all([1, 2, 3, 4, 5, 6, 7, 8, 9].map(a => rcon.send(`help ${a}`)))
-  .then(helpPages => {
-    console.log("===== All help pages =====")
-    console.log(helpPages.map(a => a.slice(0, 80) + " .."))
-    rcon.disconnect()
-  })
-})
+  let responses = await Promise.all([
+    rcon.send("help"),
+    rcon.send("whitelist list")
+  ])
+
+  for (let response of responses) {
+    console.log(response)
+  }
+
+  rcon.end()
+}
+
+main().catch(console.error)
