@@ -82,16 +82,17 @@ export class Rcon {
 
         const { host, port, password } = options
 
-        const connectErrorHandler = err => { throw err }
-
         this.socket = await new Promise<Socket>((resolve, reject) => {
-            const socket = createConnection({ host, port }, err => err ? reject(err) : resolve(socket))
-            socket.on("error", connectErrorHandler)
+            const socket = createConnection({ host, port }, error => {
+                if (error) reject(error)
+                else resolve(socket)
+                socket.removeListener("error", reject)
+            })
+            socket.on("error", reject)
             this.connecting = true
         })
 
         this.emitter.emit("did-connect")
-        this.socket.removeListener("error", connectErrorHandler)
 
         this.subscribeToSocketEvents()
         this.connecting = false
