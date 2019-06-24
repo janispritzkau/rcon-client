@@ -1,18 +1,16 @@
-import {Transform} from "stream"
-
-import {encodePacket, decodePacket, IPacket} from "../lib/packet"
-import {createSplitter} from "../lib/splitter"
+const { encodePacket, decodePacket } = require("../lib/packet")
+const { createSplitter } = require("../lib/splitter")
 
 describe("createSplitter", () => {
-  const examplePackets: IPacket[] = [
-    {id: 0, type: 3, payload: "test"},
-    {id: 234, type: 1, payload: "foo"},
-    {id: 9023, type: 2, payload: "bar"}
+  const examplePackets = [
+    { id: 0, type: 3, payload: "test" },
+    { id: 234, type: 1, payload: "foo" },
+    { id: 9023, type: 2, payload: "bar" }
   ]
 
   const messagesBuffer = Buffer.concat(examplePackets.map(packet => encodePacket(packet)))
 
-  let splitter: Transform
+  let splitter
 
   beforeEach(() => {
     splitter = createSplitter()

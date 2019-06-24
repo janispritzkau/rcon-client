@@ -1,6 +1,4 @@
 **/*
-!lib/**/*.d.ts
-!lib/**/*.js
-
+!lib/**/*
 !package.json
 !README.md

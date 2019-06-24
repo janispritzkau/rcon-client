@@ -1,8 +1,5 @@
-# compiled files
-**/*.js
-**/*.d.ts
+/lib
 
-# node js
 node_modules/
 log/
 *.log

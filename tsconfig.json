@@ -1,8 +1,11 @@
 {
-  "compilerOptions": {
-    "target": "es6",
-    "module": "commonjs",
-    "declaration": true,
-    "removeComments": true
-  }
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "commonjs",
+        "outDir": "lib",
+        "declaration": true
+    },
+    "include": [
+        "./src"
+    ]
 }

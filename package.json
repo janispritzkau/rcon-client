@@ -1,13 +1,12 @@
 {
     "name": "rcon-client",
-    "version": "3.1.2",
+    "version": "3.1.3",
     "description": "A simple RCON client made for Minecraft.",
-    "main": "lib/rcon",
-    "typings": "lib/rcon",
+    "main": "lib",
+    "typings": "lib",
     "scripts": {
-        "prepare": "npm run compile",
-        "build": "npm run compile",
-        "compile": "tsc --skipLibCheck",
+        "prepare": "npm run build",
+        "build": "tsc",
         "test": "jasmine"
     },
     "repository": {
@@ -29,13 +28,12 @@
     },
     "homepage": "https://gitlab.com/janispritzkau/node-rcon-client",
     "dependencies": {
-        "event-kit": "^2.1.0"
+        "event-kit": "^2.5.3"
     },
     "devDependencies": {
         "@types/event-kit": "^2.4.0",
-        "@types/jasmine": "^2.8.8",
-        "@types/node": "^10.10.1",
-        "jasmine": "^3.2.0",
-        "typescript": "2.9"
+        "@types/node": "^10.14.10",
+        "jasmine": "^3.4.0",
+        "typescript": "^2.9.2"
     }
 }
