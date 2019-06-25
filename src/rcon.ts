@@ -1,33 +1,34 @@
 import { Socket, createConnection } from "net"
-import { Emitter, Disposable } from "event-kit"
+import { Emitter } from "event-kit"
 
 import { decodePacket, encodePacket, PacketType, IPacket } from "./packet"
 import { createSplitter } from "./splitter"
 import { PromiseQueue } from "./utils/queue"
 
+export interface RconOptions {
+    /** @default 2000 ms */
+    packetResponseTimeout?: number,
+    /** @default 1 */
+    maxPending?: number
+}
+
+const defaultOptions: RconOptions = {
+    packetResponseTimeout: 2000,
+    maxPending: 2
+}
+
 export class Rcon {
-    private options = {
-        packetResponseTimeout: 1000
-    }
     private emitter = new Emitter()
-    private sendPacketQueue: PromiseQueue
+    private sendQueue: PromiseQueue
     private socket: Socket
 
     private requestId = 0
-    /** @hidden */
     connecting: boolean
-    /** @hidden */
     authenticated: boolean
 
-    /**
-      @param options.packetResponseTimeout Timeout of the command responses in milliseconds.
-      Defaults to `500`.
-    */
-    constructor(options?: { packetResponseTimeout?: number }) {
-        // overwrite defaults if options provided
-        if (options) this.options = Object.assign(this.options, options)
-
-        this.sendPacketQueue = new PromiseQueue({ maxConcurrent: 1 })
+    constructor(private options: RconOptions = {}) {
+        this.options = { ...defaultOptions, ...options }
+        this.sendQueue = new PromiseQueue(this.options.maxPending)
     }
 
     /**
@@ -42,34 +43,21 @@ export class Rcon {
         return rcon
     }
 
-    /*
-      Section: Event Subscription
-    */
+    onError(callback: (error: any) => any) {
+        return this.emitter.on("error", callback)
+    }
 
-    /**
-      Call your callback function when the client has connected to the server.
-    */
     onDidConnect(callback: () => any) {
         return this.emitter.on("did-connect", callback)
     }
 
-    /**
-      Call your callback function when the client has authenticated with the server.
-    */
     onDidAuthenticate(callback: () => any) {
         return this.emitter.on("did-authenticate", callback)
     }
 
-    /**
-      Call your callback function when the client was disconnected with the server.
-    */
     onDidDisconnect(callback: () => any) {
         return this.emitter.on("did-disconnect", callback)
     }
-
-    /*
-      Section: Public methods
-    */
 
     /**
       Connect and authenticate with the server.
@@ -80,7 +68,7 @@ export class Rcon {
     async connect(options: { host: string, port: number, password: string }) {
         if (this.authenticated) return Promise.resolve()
 
-        const { host, port, password } = options
+        const { host, port } = options
 
         this.socket = await new Promise<Socket>((resolve, reject) => {
             const socket = createConnection({ host, port }, error => {
@@ -97,7 +85,7 @@ export class Rcon {
         this.subscribeToSocketEvents()
         this.connecting = false
 
-        this.sendPacketQueue.resume()
+        this.sendQueue.resume()
 
         const id = this.requestId
         let packet = await this.sendPacket(PacketType.Auth, options.password, true)
@@ -115,7 +103,7 @@ export class Rcon {
         // half close the socket
         this.socket.end()
         this.authenticated = false
-        this.sendPacketQueue.pause()
+        this.sendQueue.pause()
 
         await new Promise<void>((resolve, reject) => {
             const listener = this.onDidDisconnect(() => {
@@ -125,7 +113,7 @@ export class Rcon {
         })
     }
 
-    /** Alias for [[Rcon.disconnect]] */
+    /** Alias for `.disconnect()` */
     async end() {
         await this.disconnect()
     }
@@ -142,16 +130,12 @@ export class Rcon {
         return packet.payload
     }
 
-    /*
-      Section: Private methods for handling with packets
-    */
-
     /**
       Send a raw packet to the server and handle the response packet. If there is no
-      connection at the moment it'll wait until the server is authenticated the next time.
+      connection, wait until the server is authenticated.
 
-      We need to queue the packets before they're sent because the minecraft server can't
-      handle 4 or more simultaneously sent rcon packets.
+      We need to queue the packets before they're sent because minecraft can't
+      handle 4 or more packets at once.
     */
     private async sendPacket(type: number, payload: string, isAuth = false): Promise<IPacket> {
         const id = this.requestId++
@@ -171,7 +155,7 @@ export class Rcon {
             })
         })
 
-        const addPacketToQueue = () => this.sendPacketQueue.add(() => {
+        const addPacketToQueue = () => this.sendQueue.add(() => {
             this.socket.write(encodePacket({ id, type, payload }))
             return createPacketResponsePromise()
         })
@@ -199,13 +183,13 @@ export class Rcon {
     private subscribeToSocketEvents() {
         this.socket.on("close", () => {
             this.authenticated = false
-            this.sendPacketQueue.pause()
+            this.sendQueue.pause()
             this.socket = null
             this.emitter.emit("did-disconnect", null)
         })
 
         this.socket.on("error", error => {
-            throw error
+            this.emitter.emit("error", error)
         })
 
         this.socket

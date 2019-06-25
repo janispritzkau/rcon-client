@@ -5,32 +5,21 @@ import { Transform } from "stream"
 */
 export function createSplitter() {
     let transform = new Transform()
-
     let buffer = Buffer.alloc(0)
-    let cursor = 0
 
-    let packetLength: number
+    transform._transform = (chunk, _encoding, callback) => {
+        buffer = Buffer.concat([buffer, chunk])
+        
+        let offset = 0
 
-    transform._transform = (chunk, encoding, callback) => {
-        const bufferChunk = <Buffer>chunk
-        buffer = Buffer.concat([buffer.slice(cursor), chunk])
-        cursor = 0
-
-        function splitPacket(cursor: number) {
-            if (cursor + 4 > buffer.length) return cursor
-            if (packetLength == null) packetLength = buffer.readInt32LE(cursor)
-            if (buffer.length < cursor + 4 + packetLength) return cursor
-            cursor += 4
-
-            transform.push(buffer.slice(cursor - 4, cursor + packetLength))
-
-            cursor += packetLength
-            packetLength = null
-
-            return splitPacket(cursor)
+        while (offset + 4 < buffer.length) {
+            const length = buffer.readInt32LE(offset)
+            if (offset + 4 + length > buffer.length) break
+            transform.push(buffer.slice(offset, offset + 4 + length))
+            offset += 4 + length
         }
 
-        cursor = splitPacket(cursor)
+        buffer = buffer.slice(offset)
         callback()
     }
 
