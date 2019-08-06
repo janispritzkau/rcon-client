@@ -1,7 +1,7 @@
 {
     "name": "rcon-client",
-    "version": "3.2.2",
-    "description": "A simple RCON client made for Minecraft.",
+    "version": "3.2.3",
+    "description": "A modern RCON client made for Minecraft",
     "main": "lib",
     "typings": "lib",
     "scripts": {
@@ -17,8 +17,8 @@
         "rcon",
         "client",
         "promise",
+        "typescript",
         "minecraft",
-        "server",
         "protocol"
     ],
     "author": "Janis Pritzkau <janispritzkau@gmail.com>",

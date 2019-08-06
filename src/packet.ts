@@ -23,7 +23,7 @@ export function decodePacket(buffer: Buffer, offset = 0): IPacket {
     const length = buffer.readInt32LE(offset)
     const id = buffer.readInt32LE(offset + 4)
     const type = buffer.readInt32LE(offset + 8)
-    const payload = buffer.toString("ascii", offset + 12, length + 2)
+    const payload = buffer.toString("utf-8", offset + 12, length + 2)
 
     return {
         id, type, payload
