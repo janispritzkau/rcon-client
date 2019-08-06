@@ -5,7 +5,7 @@ export interface IPacket {
 }
 
 export function encodePacket(packet: IPacket): Buffer {
-    const payloadSize = Buffer.byteLength(packet.payload, "ascii")
+    const payloadSize = Buffer.byteLength(packet.payload, "utf-8")
     const packetSize = payloadSize + 10
 
     const buffer = Buffer.allocUnsafe(packetSize + 4)
@@ -13,7 +13,7 @@ export function encodePacket(packet: IPacket): Buffer {
     buffer.writeInt32LE(packetSize, 0)
     buffer.writeInt32LE(packet.id, 4)
     buffer.writeInt32LE(packet.type, 8)
-    buffer.write(packet.payload, 12, packetSize + 2, "ascii")
+    buffer.write(packet.payload, 12, packetSize + 2, "utf-8")
     buffer.fill(0x00, payloadSize + 12)
 
     return buffer
