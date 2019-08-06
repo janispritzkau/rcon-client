@@ -1,6 +1,6 @@
 {
     "name": "rcon-client",
-    "version": "3.2.1",
+    "version": "3.2.2",
     "description": "A simple RCON client made for Minecraft.",
     "main": "lib",
     "typings": "lib",
@@ -11,7 +11,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://gitlab.com/janispritzkau/rcon-client.git"
+        "url": "git+https://github.com/janispritzkau/rcon-client.git"
     },
     "keywords": [
         "rcon",
@@ -24,9 +24,8 @@
     "author": "Janis Pritzkau <janispritzkau@gmail.com>",
     "license": "MIT",
     "bugs": {
-        "url": "https://gitlab.com/janispritzkau/rcon-client/issues"
+        "url": "https://github.com/janispritzkau/rcon-client/issues"
     },
-    "homepage": "https://gitlab.com/janispritzkau/rcon-client",
     "dependencies": {
         "event-kit": "^2.5.3"
     },
@@ -34,6 +33,6 @@
         "@types/event-kit": "^2.4.0",
         "@types/node": "^10.14.10",
         "jasmine": "^3.4.0",
-        "typescript": "^2.9.2"
+        "typescript": "^3.5.3"
     }
 }
