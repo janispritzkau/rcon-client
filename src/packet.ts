@@ -1,29 +1,27 @@
-export interface IPacket {
+export interface Packet {
     id: number
     type: number
     payload: string
 }
 
-export function encodePacket(packet: IPacket): Buffer {
-    const payloadSize = Buffer.byteLength(packet.payload, "utf-8")
-    const packetSize = payloadSize + 10
+export function encodePacket(packet: Packet): Buffer {
+    const payloadSize = Buffer.byteLength(packet.payload)
+    const buffer = Buffer.alloc(payloadSize + 14)
 
-    const buffer = Buffer.allocUnsafe(packetSize + 4)
-
-    buffer.writeInt32LE(packetSize, 0)
+    buffer.writeInt32LE(payloadSize + 10, 0)
     buffer.writeInt32LE(packet.id, 4)
     buffer.writeInt32LE(packet.type, 8)
-    buffer.write(packet.payload, 12, packetSize + 2, "utf-8")
-    buffer.fill(0x00, payloadSize + 12)
+    buffer.write(packet.payload, 12)
+    buffer.fill(0, payloadSize + 12)
 
     return buffer
 }
 
-export function decodePacket(buffer: Buffer, offset = 0): IPacket {
-    const length = buffer.readInt32LE(offset)
-    const id = buffer.readInt32LE(offset + 4)
-    const type = buffer.readInt32LE(offset + 8)
-    const payload = buffer.toString("utf-8", offset + 12, length + 2)
+export function decodePacket(buffer: Buffer): Packet {
+    const length = buffer.readInt32LE(0)
+    const id = buffer.readInt32LE(4)
+    const type = buffer.readInt32LE(8)
+    const payload = buffer.toString("utf-8", 12, length + 2)
 
     return {
         id, type, payload

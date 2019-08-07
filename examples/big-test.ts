@@ -3,13 +3,9 @@
 
 import { Rcon } from "../src"
 
-const connectOptions = {
-    host: "localhost", port: 25575, password: "password"
-}
+const rcon = new Rcon({ timeout: 500, host: "localhost", port: 25575, password: "password" })
 
-const rcon = new Rcon({ packetResponseTimeout: 500 })
-
-rcon.connect(connectOptions)
+rcon.connect()
     .catch(e => console.error("Couldn't connect:", e))
     .then(() => {
         const promises = new Array(2000).fill(null).map((_, i) => {
