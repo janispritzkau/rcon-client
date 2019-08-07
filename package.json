@@ -1,6 +1,6 @@
 {
     "name": "rcon-client",
-    "version": "4.0.0",
+    "version": "4.0.1",
     "description": "A modern RCON client made for Minecraft",
     "main": "lib",
     "typings": "lib",
@@ -23,11 +23,8 @@
     ],
     "author": "Janis Pritzkau <janispritzkau@gmail.com>",
     "license": "MIT",
-    "bugs": {
-        "url": "https://github.com/janispritzkau/rcon-client/issues"
-    },
     "dependencies": {
-        "event-kit": "^2.5.3"
+        "typed-emitter": "^0.1.0"
     },
     "devDependencies": {
         "@types/event-kit": "^2.4.0",

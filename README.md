@@ -29,7 +29,16 @@ for (response of responses) {
 rcon.end()
 ```
 
-More examples are in the [`examples/`](https://gitlab.com/janispritzkau/rcon-client/tree/master/examples) folder.
+Or alternatively you can create an instance via the constructor.
+
+```js
+const rcon = new Rcon({ host: "localhost", port: 25575, password: "1234" })
+
+await rcon.connect()
+rcon.end()
+```
+
+More examples are in the [`examples/`](https://github.com/janispritzkau/rcon-client/tree/master/examples) folder.
 
 ## Further Reading
 

@@ -1,9 +1,10 @@
 import { Socket, connect } from "net"
-import { Emitter } from "event-kit"
+import TypedEmitter from "typed-emitter"
 
 import { decodePacket, encodePacket, PacketType, Packet } from "./packet"
 import { createSplitter } from "./splitter"
 import { PromiseQueue } from "./queue"
+import { EventEmitter } from "events"
 
 export interface RconConfig {
     host: string
@@ -25,12 +26,19 @@ const defaultConfig = {
     reconnect: false
 }
 
+interface Events {
+    connect: () => void
+    authenticated: () => void
+    end: () => void
+    error: (error: any) => void
+}
+
 export class Rcon {
-    private emitter = new Emitter()
     private sendQueue: PromiseQueue
     private callbacks = new Map<number, (packet: Packet) => void>()
     private requestId = 0
 
+    emitter = new EventEmitter() as TypedEmitter<Events>
     config: Required<RconConfig>
     socket: Socket | null = null
     authenticated = false
@@ -52,13 +60,9 @@ export class Rcon {
         return rcon
     }
 
-    onError(callback: (error: any) => any) {
-        return this.emitter.on("error", callback)
-    }
-
-    onConnected(callback: () => any) {
-        return this.emitter.on("connected", callback)
-    }
+    on = this.emitter.on
+    once = this.emitter.once
+    removeListener = this.emitter.removeListener
 
     /**
       Connect and authenticate with the server.
@@ -67,7 +71,7 @@ export class Rcon {
       with the server.
     */
     async connect() {
-        if (this.authenticated) return this
+        if (this.socket) return this
 
         this.socket = connect({ host: this.config.host, port: this.config.port })
 
@@ -80,12 +84,12 @@ export class Rcon {
             })
         })
 
-        // socket.end() was called before connected
-        if (!this.socket.writable) return
+        this.emitter.emit("connect")
 
         this.socket.on("end", () => {
-            this.socket = null
+            this.emitter.emit("end")
             this.sendQueue.pause()
+            this.socket = null
             this.authenticated = false
         })
 
@@ -106,7 +110,7 @@ export class Rcon {
         }
 
         this.authenticated = true
-
+        this.emitter.emit("authenticated")
         return this
     }
 
@@ -118,8 +122,7 @@ export class Rcon {
         this.sendQueue.pause()
         this.socket.end()
         this.authenticated = false
-
-        return new Promise(resolve => this.socket!.once("end", resolve))
+        this.socket = null
     }
 
     /**
