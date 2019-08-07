@@ -1,5 +1,7 @@
 # rcon-client
 
+[![npm version](https://img.shields.io/npm/v/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
+
 A simple and easy to use RCON client made to work with Minecraft servers.
 It's written in Typescript and uses async methods.
 
@@ -13,10 +15,7 @@ const rcon = await Rcon.connect({
     password: "password"
 })
 
-console.log("Connected")
-
-let listResponse = await rcon.send("list")
-console.log(listResponse)
+console.log(await rcon.send("list"))
 
 let responses = await Promise.all([
     rcon.send("help"),
