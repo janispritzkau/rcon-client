@@ -9,7 +9,7 @@ export function createSplitter() {
 
     transform._transform = (chunk, _encoding, callback) => {
         buffer = Buffer.concat([buffer, chunk])
-        
+
         let offset = 0
 
         while (offset + 4 < buffer.length) {

@@ -6,24 +6,28 @@ import { createSplitter } from "./splitter"
 import { PromiseQueue } from "./queue"
 import { EventEmitter } from "events"
 
-export interface RconConfig {
+export interface RconOptions {
     host: string
     /** @default 25575 */
     port?: number
     password: string
-    /** @default 2000 ms */
+    /**
+     * Maximum time for a packet to arrive before an error is thrown
+     * @default 2000 ms
+     */
     timeout?: number,
-    /** @default 1 */
+    /**
+     * Maximum number of parallel requests. Most minecraft servers can
+     * only reliably process one packet at a time.
+     * @default 1
+     */
     maxPending?: number
-    /** @default false */
-    reconnect?: boolean
 }
 
-const defaultConfig = {
+const defaultOptions = {
     port: 25575,
     timeout: 2000,
-    maxPending: 1,
-    reconnect: false
+    maxPending: 1
 }
 
 interface Events {
@@ -34,53 +38,47 @@ interface Events {
 }
 
 export class Rcon {
-    private sendQueue: PromiseQueue
-    private callbacks = new Map<number, (packet: Packet) => void>()
-    private requestId = 0
-
-    emitter = new EventEmitter() as TypedEmitter<Events>
-    config: Required<RconConfig>
-    socket: Socket | null = null
-    authenticated = false
-
-    constructor(config: RconConfig) {
-        this.config = { ...defaultConfig, ...config }
-        this.sendQueue = new PromiseQueue(this.config.maxPending)
-    }
-
-    /**
-      Create `Rcon` instance and call the `.connect()` function with options
-
-      @returns A promise that will be resolved after the client is authenticated
-      with the server.
-    */
-    static async connect(config: RconConfig): Promise<Rcon> {
+    static async connect(config: RconOptions): Promise<Rcon> {
         const rcon = new Rcon(config)
         await rcon.connect()
         return rcon
     }
 
-    on = this.emitter.on
-    once = this.emitter.once
-    removeListener = this.emitter.removeListener
+    private sendQueue: PromiseQueue
+    private callbacks = new Map<number, (packet: Packet) => void>()
+    private requestId = 0
 
-    /**
-      Connect and authenticate with the server.
+    config: Required<RconOptions>
 
-      @returns A promise that will be resolved after the client is authenticated
-      with the server.
-    */
+    emitter = new EventEmitter() as TypedEmitter<Events>
+    socket: Socket | null = null
+    authenticated = false
+
+    on = this.emitter.on.bind(this.emitter)
+    once = this.emitter.once.bind(this.emitter)
+    off = this.emitter.removeListener.bind(this.emitter)
+
+    constructor(config: RconOptions) {
+        this.config = { ...defaultOptions, ...config }
+        this.sendQueue = new PromiseQueue(this.config.maxPending)
+    }
+
     async connect() {
         if (this.socket) return this
 
-        this.socket = connect({ host: this.config.host, port: this.config.port })
+        const socket = this.socket = connect({
+            host: this.config.host,
+            port: this.config.port
+        })
+        socket.setNoDelay(true)
+        socket.on("error", error => this.emitter.emit("error", error))
 
         await new Promise((resolve, reject) => {
-            this.socket!.on("error", reject)
-            this.socket!.on("connect", (error: any) => {
+            socket.on("error", reject)
+            socket.on("connect", (error: any) => {
+                socket.off("error", reject)
                 if (error) reject(error)
                 else resolve()
-                this.socket!.removeListener("error", reject)
             })
         })
 
@@ -120,6 +118,7 @@ export class Rcon {
     async end() {
         if (!this.socket) return
         this.sendQueue.pause()
+        this.socket.removeAllListeners()
         this.socket.end()
         this.authenticated = false
         this.socket = null
@@ -140,14 +139,19 @@ export class Rcon {
         const id = this.requestId++
 
         const createSendPromise = () => {
-            this.socket!.write(encodePacket({ id, type, payload }))
+            this.socket!.write(encodePacket(id, type, payload))
 
             return new Promise<Packet>((resolve, reject) => {
+                const onEnd = () => (reject("Connection closed"), clearTimeout(timeout))
+                this.emitter.on("end", onEnd)
+
                 const timeout = setTimeout(() => {
+                    this.off("end", onEnd)
                     reject(new Error(`Timeout for packet id ${id}`))
                 }, this.config.timeout)
 
                 this.callbacks.set(id, packet => {
+                    this.off("end", onEnd)
                     clearTimeout(timeout)
                     resolve(packet)
                 })
