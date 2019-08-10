@@ -131,6 +131,7 @@ export class Rcon {
       @returns A promise that will be resolved with the command's response from the server.
     */
     async send(command: string) {
+        if (!this.authenticated || !this.socket) throw new Error("Not connected")
         const packet = await this.sendPacket(PacketType.Command, command)
         return packet.payload
     }
