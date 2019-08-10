@@ -1,4 +1,3 @@
-**/*
-!lib/**/*
-!package.json
-!README.md
+/examples
+/spec
+/src

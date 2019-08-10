@@ -1,6 +1,6 @@
 {
     "name": "rcon-client",
-    "version": "4.0.2",
+    "version": "4.0.3",
     "description": "A modern RCON client made for Minecraft",
     "main": "lib",
     "typings": "lib",

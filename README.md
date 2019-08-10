@@ -1,6 +1,7 @@
 # rcon-client
 
 [![npm version](https://img.shields.io/npm/v/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
+[![licence](https://img.shields.io/github/license/janispritzkau/rcon-client)](https://github.com/janispritzkau/rcon-client/blob/master/LICENSE)
 
 A simple and easy to use RCON client made to work with Minecraft servers.
 It's written in Typescript and uses async methods.
