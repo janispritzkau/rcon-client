@@ -4,14 +4,14 @@ export interface Packet {
     payload: string
 }
 
-export function encodePacket(id: number, type: number, payload: string): Buffer {
-    const payloadSize = Buffer.byteLength(payload)
+export function encodePacket(packet: Packet): Buffer {
+    const payloadSize = Buffer.byteLength(packet.payload)
     const buffer = Buffer.alloc(payloadSize + 14)
 
     buffer.writeInt32LE(payloadSize + 10, 0)
-    buffer.writeInt32LE(id, 4)
-    buffer.writeInt32LE(type, 8)
-    buffer.write(payload, 12)
+    buffer.writeInt32LE(packet.id, 4)
+    buffer.writeInt32LE(packet.type, 8)
+    buffer.write(packet.payload, 12)
     buffer.fill(0, payloadSize + 12)
 
     return buffer

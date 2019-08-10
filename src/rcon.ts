@@ -140,7 +140,7 @@ export class Rcon {
         const id = this.requestId++
 
         const createSendPromise = () => {
-            this.socket!.write(encodePacket(id, type, payload))
+            this.socket!.write(encodePacket({ id, type, payload }))
 
             return new Promise<Packet>((resolve, reject) => {
                 const onEnd = () => (reject("Connection closed"), clearTimeout(timeout))
