@@ -1,13 +1,17 @@
 # rcon-client
 
-[![npm version](https://img.shields.io/npm/v/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
-[![licence](https://img.shields.io/github/license/janispritzkau/rcon-client)](https://github.com/janispritzkau/rcon-client/blob/master/LICENSE)
+[![npm](https://img.shields.io/npm/v/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
+[![downloads](https://img.shields.io/npm/dm/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
 
 A simple and easy to use RCON client made to work with Minecraft servers.
 It's written in Typescript and uses async methods.
 
-`rcon-client` has a built-in package queue with a max pending setting which
-restricts the number of packets sent before one is received.
+`rcon-client` has a built-in packet queue with a max pending setting which limits
+the number of packets sent before one is received.
+If you need to send a bunch of packets at once, this library might be right for you.
+This was mainly the reason why I created yet another implementation.
+
+The `Rcon` class supports connecting and disconnecting at any time, making it easier to share an instance in many places.
 
 ## Usage
 
@@ -43,9 +47,10 @@ rcon.end()
 
 More examples can be found inthe repository's [`examples/`](https://github.com/janispritzkau/rcon-client/tree/master/examples) folder.
 
-`rcon-client` uses node's event emitter internally. The `Rcon` class doesn't
-extend the `EventEmitter` class but instead has a `emitter` property that can be used
-to access all of the methods of the event emitter. Additionally the `on`, `once` and `off` methods are exposed on the main class.
+## Events
+
+`rcon-client` uses node's event emitter internally. The event emitter is accessible
+with the `emitter` property. Additionally the `on`, `once` and `off` methods are exposed on the main class.
 
 The `Rcon` class has these events:
 
@@ -54,10 +59,4 @@ The `Rcon` class has these events:
 - `end`
 - `error`
 
-## Further Reading
-
-Read more about the [RCON Protocol](http://wiki.vg/RCON)
-
-## License
-
-MIT
+Auto reconnect can be implemented with these events.
