@@ -3,9 +3,9 @@ const { createSplitter } = require("../lib/splitter")
 
 describe("createSplitter", () => {
   const examplePackets = [
-    { id: 0, type: 3, payload: "test" },
-    { id: 234, type: 1, payload: "foo" },
-    { id: 9023, type: 2, payload: "bar" }
+    { id: 0, type: 3, payload: Buffer.from("test") },
+    { id: 234, type: 1, payload: Buffer.from("foo") },
+    { id: 9023, type: 2, payload: Buffer.from("bar") }
   ]
 
   const messagesBuffer = Buffer.concat(examplePackets.map(packet => encodePacket(packet)))

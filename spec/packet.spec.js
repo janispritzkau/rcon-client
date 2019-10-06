@@ -2,7 +2,7 @@ const { decodePacket, encodePacket } = require("../lib/packet")
 
 describe("encodePacket", () => {
   it("creates a buffer from a packet", () => {
-    const buffer = encodePacket({ id: 0xf, type: 0x3, payload: "payload" })
+    const buffer = encodePacket({ id: 0xf, type: 0x3, payload: Buffer.from("payload") })
     expect(buffer instanceof Buffer).toBeTruthy()
 
     //                                  id      |    type   |  payload  |  padding
@@ -14,7 +14,7 @@ describe("encodePacket", () => {
 
 describe("decodePacket", () => {
   it("reads a packet from a buffer and returns the packet", () => {
-    const packet = { id: 235, type: 3, payload: "command" }
+    const packet = { id: 235, type: 3, payload: Buffer.from("command") }
 
     expect(decodePacket(encodePacket(packet))).toEqual(packet)
   })
