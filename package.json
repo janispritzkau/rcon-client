@@ -1,6 +1,6 @@
 {
     "name": "rcon-client",
-    "version": "4.0.4",
+    "version": "4.1.0",
     "description": "A modern RCON client made for Minecraft that features a packet queue",
     "main": "lib",
     "typings": "lib",
@@ -27,8 +27,8 @@
         "typed-emitter": "^0.1.0"
     },
     "devDependencies": {
-        "@types/node": "^10.14.16",
-        "jasmine": "^3.4.0",
-        "typescript": "^3.5.3"
+        "@types/node": "^10.14.20",
+        "jasmine": "^3.5.0",
+        "typescript": "^3.6.3"
     }
 }

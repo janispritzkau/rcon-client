@@ -96,7 +96,7 @@ export class Rcon {
             .on("data", this.handlePacket.bind(this))
 
         const id = this.requestId
-        const packet = await this.sendPacket(PacketType.Auth, this.config.password)
+        const packet = await this.sendPacket(PacketType.Auth, Buffer.from(this.config.password, "utf-8"))
 
         this.sendQueue.resume()
 
@@ -131,12 +131,17 @@ export class Rcon {
       @returns A promise that will be resolved with the command's response from the server.
     */
     async send(command: string) {
+        const payload = await this.sendRaw(Buffer.from(command, "utf-8"))
+        return payload.toString("utf-8")
+    }
+
+    async sendRaw(buffer: Buffer) {
         if (!this.authenticated || !this.socket) throw new Error("Not connected")
-        const packet = await this.sendPacket(PacketType.Command, command)
+        const packet = await this.sendPacket(PacketType.Command, buffer)
         return packet.payload
     }
 
-    private async sendPacket(type: PacketType, payload: string) {
+    private async sendPacket(type: PacketType, payload: Buffer) {
         const id = this.requestId++
 
         const createSendPromise = () => {
