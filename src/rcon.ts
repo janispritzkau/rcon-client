@@ -64,7 +64,9 @@ export class Rcon {
     }
 
     async connect() {
-        if (this.socket) return this
+        if (this.socket) {
+            throw new Error("Already connected or connecting")
+        }
 
         const socket = this.socket = connect({
             host: this.config.host,
@@ -75,17 +77,16 @@ export class Rcon {
         socket.on("error", error => this.emitter.emit("error", error))
 
         await new Promise((resolve, reject) => {
-            socket.on("error", reject)
-            socket.on("connect", (error: any) => {
+            socket.once("error", reject)
+            socket.on("connect", () => {
                 socket.off("error", reject)
-                if (error) reject(error)
-                else resolve()
+                resolve()
             })
         })
 
         this.emitter.emit("connect")
 
-        this.socket.on("end", () => {
+        this.socket.on("close", () => {
             this.emitter.emit("end")
             this.sendQueue.pause()
             this.socket = null
@@ -117,12 +118,13 @@ export class Rcon {
       Close the connection to the server.
     */
     async end() {
-        if (!this.socket) return
+        if (!this.socket || this.socket.connecting) {
+            throw new Error("Not connected")
+        }
+        if (!this.socket.writable) throw new Error("End called twice")
         this.sendQueue.pause()
-        this.socket.removeAllListeners()
         this.socket.end()
-        this.authenticated = false
-        this.socket = null
+        await new Promise(resolve => this.on("end", resolve))
     }
 
     /**
