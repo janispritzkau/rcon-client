@@ -70,6 +70,7 @@ export class Rcon {
             host: this.config.host,
             port: this.config.port
         })
+
         socket.setNoDelay(true)
         socket.on("error", error => this.emitter.emit("error", error))
 
@@ -96,7 +97,7 @@ export class Rcon {
             .on("data", this.handlePacket.bind(this))
 
         const id = this.requestId
-        const packet = await this.sendPacket(PacketType.Auth, Buffer.from(this.config.password, "utf-8"))
+        const packet = await this.sendPacket(PacketType.Auth, Buffer.from(this.config.password))
 
         this.sendQueue.resume()
 
@@ -148,7 +149,7 @@ export class Rcon {
             this.socket!.write(encodePacket({ id, type, payload }))
 
             return new Promise<Packet>((resolve, reject) => {
-                const onEnd = () => (reject("Connection closed"), clearTimeout(timeout))
+                const onEnd = () => (reject(new Error("Connection closed")), clearTimeout(timeout))
                 this.emitter.on("end", onEnd)
 
                 const timeout = setTimeout(() => {
