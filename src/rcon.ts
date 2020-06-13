@@ -119,12 +119,14 @@ export class Rcon {
     */
     async end() {
         if (!this.socket || this.socket.connecting) {
-            throw new Error("Not connected")
+            throw new Error("Not connected");
         }
-        if (!this.socket.writable) throw new Error("End called twice")
-        this.sendQueue.pause()
-        this.socket.end()
-        await new Promise(resolve => this.on("end", resolve))
+        if (!this.socket.writable)
+            throw new Error("End called twice");
+        this.sendQueue.pause();
+        this.socket.end();
+        this.socket.emit("close");
+        await new Promise(resolve => this.on("end", resolve()))
     }
 
     /**
