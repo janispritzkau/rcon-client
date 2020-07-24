@@ -76,13 +76,18 @@ export class Rcon {
         socket.setNoDelay(true)
         socket.on("error", error => this.emitter.emit("error", error))
 
-        await new Promise((resolve, reject) => {
-            socket.once("error", reject)
-            socket.on("connect", () => {
-                socket.off("error", reject)
-                resolve()
+        try {
+            await new Promise((resolve, reject) => {
+                socket.once("error", reject)
+                socket.on("connect", () => {
+                    socket.off("error", reject)
+                    resolve()
+                })
             })
-        })
+        } catch (error) {
+            this.socket = null
+            throw error
+        }
 
         this.emitter.emit("connect")
 
