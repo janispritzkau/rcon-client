@@ -1,23 +1,18 @@
-import { Rcon } from "../src"
+import { RconClient } from "../src"
 
 async function main() {
-    const rcon = new Rcon({
-        host: "localhost",
-        port: 25575,
-        password: "1234"
-    })
+  const rcon = new RconClient()
 
-    rcon.on("connect", () => console.log("connected"))
-    rcon.on("authenticated", () => console.log("authenticated"))
-    rcon.on("end", () => console.log("end"))
+  rcon.on("error", (error) => console.log("error", error))
+  rcon.on("connect", () => console.log("connected"))
+  rcon.on("authenticated", () => console.log("authenticated"))
+  rcon.on("end", () => console.log("end"))
 
-    await rcon.connect()
+  await rcon.connect("localhost", 25576, "1234")
 
-    console.log(await rcon.send("/list"))
+  console.log(await rcon.send("list"))
 
-    await Promise.all([...Array(10)].map((_, i) => rcon.send(`/say ${i}`)))
-
-    rcon.end()
+  rcon.end()
 }
 
 main().catch(console.error)

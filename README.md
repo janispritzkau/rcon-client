@@ -11,26 +11,22 @@ the number of packets sent before one is received.
 If you need to send a bunch of packets at once, this library might be right for you.
 This was mainly the reason why I created yet another implementation.
 
-The `Rcon` class supports connecting and disconnecting at any time, making it easier to share an instance in many places.
-
 ## Usage
 
 ```js
-import { Rcon } from "rcon-client"
+import { RconClient } from "rcon-client"
 
-const rcon = await Rcon.connect({
-    host: "localhost", port: 25575, password: "1234"
-})
+const rcon = await RconClient.connect("localhost", 25575, "password")
 
 console.log(await rcon.send("list"))
 
-let responses = await Promise.all([
-    rcon.send("help"),
-    rcon.send("whitelist list")
+const responses = await Promise.all([
+  rcon.send("help"),
+  rcon.send("whitelist list")
 ])
 
 for (response of responses) {
-    console.log(response)
+  console.log(response)
 }
 
 rcon.end()
@@ -39,24 +35,18 @@ rcon.end()
 Or alternatively you can create an instance via the constructor.
 
 ```js
-const rcon = new Rcon({ host: "localhost", port: 25575, password: "1234" })
-
-await rcon.connect()
+const rcon = new RconClient()
+await rcon.connect("localhost", 25575, "password")
 rcon.end()
 ```
 
-More examples can be found inthe repository's [`examples/`](https://github.com/janispritzkau/rcon-client/tree/master/examples) folder.
+More examples can be found in the repository's [`examples/`](https://github.com/janispritzkau/rcon-client/tree/next/examples) folder.
 
 ## Events
 
-`rcon-client` uses node's event emitter internally. The event emitter is accessible
-with the `emitter` property. Additionally the `on`, `once` and `off` methods are exposed on the main class.
+The `RconClient` class extends Node's `EventEmitter`. All methods of it will be available. These are all the events which the client might emit:
 
-The `Rcon` class has these events:
-
-- `connect`
-- `authenticated`
-- `end`
-- `error`
-
-Auto reconnect can be implemented with these events.
+- `error` - Socket error has occured
+- `connect` - Socket is connected but not yet authenticated.
+- `authenticated` - Client has successfully authenticated with the server.
+- `end` - Client connection was closed.

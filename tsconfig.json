@@ -1,12 +1,15 @@
 {
-    "compilerOptions": {
-        "target": "esnext",
-        "module": "commonjs",
-        "outDir": "lib",
-        "strict": true,
-        "declaration": true
-    },
-    "include": [
-        "./src"
-    ]
+  "compilerOptions": {
+    "target": "es2019",
+    "module": "commonjs",
+    "outDir": "lib",
+    "lib": [
+      "esnext"
+    ],
+    "strict": true,
+    "declaration": true
+  },
+  "include": [
+    "./src"
+  ]
 }
