@@ -11,6 +11,12 @@ the number of packets sent before one is received.
 If you need to send a bunch of packets at once, this library might be right for you.
 This was mainly the reason why I created yet another implementation.
 
+## Install
+
+```
+npm install rcon-client@next
+```
+
 ## Usage
 
 ```js
