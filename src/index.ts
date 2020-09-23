@@ -63,7 +63,10 @@ export class RconClient extends (EventEmitter as new () => TypedEmitter<Events>)
 
   constructor(public options: RconOptions = {}) {
     super()
-    this.options = { ...defaultOptions, ...options }
+    this.setMaxListeners(0)
+    this.options.timeout = options.timeout ?? defaultOptions.timeout
+    this.options.connectTimeout = options.connectTimeout ?? defaultOptions.connectTimeout
+    this.options.maxPending = options.maxPending ?? defaultOptions.maxPending
     this.socket = new Socket()
     this.socket.on("error", error => this.emit("error", error))
     this.socket.on("close", () => this.emit("end"))
@@ -103,8 +106,6 @@ export class RconClient extends (EventEmitter as new () => TypedEmitter<Events>)
 
     this.authenticated = true
     this.emit("authenticated")
-
-    return this
   }
 
   async end() {
@@ -122,11 +123,15 @@ export class RconClient extends (EventEmitter as new () => TypedEmitter<Events>)
     const id = this.nextRequestId++
 
     return await this.sendQueue.add(() => new Promise((resolve, reject) => {
-      if (!this.socket.writable) throw new Error("Socket not connected or closed")
+      if (!this.socket.writable) throw new Error("Socket closed or not connected")
+      if (type == PacketType.Command && !this.authenticated) throw new Error("Client not yet authenticated")
       this.socket.write(encodePacket({ id, type, payload }))
 
-      const onClose = () => reject("Connection closed")
-      this.socket.on("close", onClose)
+      const onEnd = () => {
+        clearTimeout(timeout)
+        reject(new Error("Connection closed"))
+      }
+      this.on("end", onEnd)
 
       const timeout = setTimeout(() => {
         reject(new Error(`Packet with id ${id} timed out`))
@@ -134,7 +139,7 @@ export class RconClient extends (EventEmitter as new () => TypedEmitter<Events>)
       }, this.options.timeout!)
 
       this.callbacks.set(id, packet => {
-        this.socket.off("close", onClose)
+        this.off("end", onEnd)
         clearTimeout(timeout)
         resolve(packet)
       })
