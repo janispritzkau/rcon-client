@@ -5,7 +5,7 @@ This example draws a mandelbrot map art at 0, 64, 0 on your minecraft server.
 import { RconClient } from "../src"
 
 async function main() {
-  const rcon = await RconClient.connect("localhost", 25575, "1234", { maxPending: 8 })
+  const rcon = await RconClient.connect("localhost", 25575, "1234")
 
   const start = Date.now()
 

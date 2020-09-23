@@ -8,7 +8,7 @@ async function main() {
   rcon.on("authenticated", () => console.log("authenticated"))
   rcon.on("end", () => console.log("end"))
 
-  await rcon.connect("localhost", 25576, "1234")
+  await rcon.connect("localhost", 25575, "1234")
 
   console.log(await rcon.send("list"))
 
