@@ -61,6 +61,8 @@ export class Rcon {
     constructor(config: RconOptions) {
         this.config = { ...defaultOptions, ...config }
         this.sendQueue = new PromiseQueue(this.config.maxPending)
+        
+        if (config.maxPending) this.emitter.setMaxListeners(config.maxPending)
     }
 
     async connect() {
