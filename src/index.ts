@@ -115,8 +115,13 @@ export class RconClient extends (EventEmitter as new () => TypedEmitter<Events>)
   }
 
   async send(command: string) {
-    const packet = await this.sendPacket(PacketType.Command, Buffer.from(command))
-    return packet.payload.toString()
+    const payload = await this.sendRaw(Buffer.from(command, "utf-8"))
+    return payload.toString("utf-8")
+  }
+
+  async sendRaw(buffer: Buffer) {
+    const packet = await this.sendPacket(PacketType.Command, buffer)
+    return packet.payload
   }
 
   private async sendPacket(type: PacketType, payload: Buffer): Promise<Packet> {
