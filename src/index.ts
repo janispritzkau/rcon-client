@@ -139,8 +139,13 @@ export class RconClient extends (EventEmitter as new () => TypedEmitter<Events>)
       this.on("end", onEnd)
 
       const timeout = setTimeout(() => {
-        reject(new Error(`Packet with id ${id} timed out`))
-        if (this.options.closeOnTimeout) this.socket.destroy()
+        if (type == PacketType.Auth) {
+          this.socket.destroy()
+          reject(new Error("Authentication timed out"))
+        } else {
+          if (this.options.closeOnTimeout) this.socket.destroy()
+          reject(new Error(`Packet with id ${id} timed out`))
+        }
       }, this.options.timeout!)
 
       this.callbacks.set(id, packet => {
@@ -156,9 +161,15 @@ export class RconClient extends (EventEmitter as new () => TypedEmitter<Events>)
     const id = this.authenticated ? packet.id : this.nextRequestId - 1
     const handler = this.callbacks.get(packet.id)
 
+    if (this.authenticated && packet.type != PacketType.CommandResponse) {
+      throw new Error("Received invalid packet type")
+    }
+
     if (handler) {
       handler(packet)
       this.callbacks.delete(id)
+    } else {
+      throw new Error("Unexpected response packet")
     }
   }
 }
