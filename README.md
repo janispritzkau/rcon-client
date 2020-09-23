@@ -4,18 +4,11 @@
 [![downloads](https://img.shields.io/npm/dm/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
 
 A simple and easy to use RCON client made to work with Minecraft servers.
-It's written in Typescript and uses async methods.
+It's written in TypeScript and uses async methods.
 
 `rcon-client` has a built-in packet queue with a max pending setting which limits
-the number of packets sent before one is received.
-If you need to send a bunch of packets at once, this library might be right for you.
-This was mainly the reason why I created yet another implementation.
-
-## Install
-
-```
-npm install rcon-client@next
-```
+the number of packets sent before one is received. It can be useful against bad
+server implementations.
 
 ## Usage
 
@@ -48,11 +41,15 @@ rcon.end()
 
 More examples can be found in the repository's [`examples/`](https://github.com/janispritzkau/rcon-client/tree/next/examples) folder.
 
-## Events
+## Events and error handling
 
-The `RconClient` class extends Node's `EventEmitter`. All methods of it will be available. These are all the events which the client might emit:
+The class `RconClient` extends Node's `EventEmitter`. All methods of it will be available.
+These are all the events the clients might emit:
 
 - `error` - Socket error has occured
 - `connect` - Socket is connected but not yet authenticated.
 - `authenticated` - Client has successfully authenticated with the server.
 - `end` - Client connection was closed.
+
+Make sure to add a `error` event handler to the `RconClient` instance to prevent
+unexpected crashes.
