@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
 [![downloads](https://img.shields.io/npm/dm/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
 
-> **A new version of rcon-client with breaking changes is coming. Try it out on the [`next`](https://github.com/janispritzkau/rcon-client/tree/next) branch.**
+> **⚠️ This library has not been maintained for a while. Please use it with caution or switch to another implementation!**
 
 A simple and easy to use RCON client made to work with Minecraft servers.
 It's written in Typescript and uses async methods.
