@@ -1,34 +1,29 @@
 {
-    "name": "rcon-client",
-    "version": "4.2.3",
-    "description": "A modern RCON client made for Minecraft that features a packet queue",
-    "main": "lib",
-    "typings": "lib",
-    "scripts": {
-        "prepare": "npm run build && npm run test",
-        "build": "tsc",
-        "test": "jasmine"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/janispritzkau/rcon-client.git"
-    },
-    "keywords": [
-        "rcon",
-        "client",
-        "promise",
-        "typescript",
-        "minecraft",
-        "protocol"
-    ],
-    "author": "Janis Pritzkau <janispritzkau@gmail.com>",
-    "license": "MIT",
-    "dependencies": {
-        "typed-emitter": "^0.1.0"
-    },
-    "devDependencies": {
-        "@types/node": "^10.14.20",
-        "jasmine": "^3.5.0",
-        "typescript": "^3.6.3"
-    }
+  "name": "rcon-client",
+  "version": "5.0.0-alpha.2",
+  "description": "A client for the Minecraft RCON protocol",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janispritzkau/rcon-client.git"
+  },
+  "keywords": [
+    "rcon",
+    "client",
+    "promise",
+    "typescript",
+    "minecraft",
+    "protocol"
+  ],
+  "author": "Janis Pritzkau <janispritzkau@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@tsconfig/node18": "^18.2.2",
+    "@types/node": "^18.19.10",
+    "typescript": "^5.3.3"
+  }
 }
