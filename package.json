@@ -1,0 +1,29 @@
+{
+  "name": "rcon-client",
+  "version": "5.0.0-alpha.2",
+  "description": "A client for the Minecraft RCON protocol",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janispritzkau/rcon-client.git"
+  },
+  "keywords": [
+    "rcon",
+    "client",
+    "promise",
+    "typescript",
+    "minecraft",
+    "protocol"
+  ],
+  "author": "Janis Pritzkau <janispritzkau@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@tsconfig/node18": "^18.2.2",
+    "@types/node": "^18.19.10",
+    "typescript": "^5.3.3"
+  }
+}
