@@ -6,15 +6,8 @@ async function main() {
     password: "1234",
   });
 
-  for (let i = 0; i < 1000; i++) {
-    await client.cmd(
-      `data modify storage foo bar append value ${
-        JSON.stringify(Math.random().toString(36).slice(2))
-      }`,
-    );
-    const response = await client.cmd("data get storage foo bar");
-    console.log(response);
-  }
+  const list = await client.cmd("list");
+  console.log(list);
 
   await client.close();
 }

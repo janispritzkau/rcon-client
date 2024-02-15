@@ -1,74 +1,86 @@
-import { createConnection, Socket, TcpNetConnectOpts } from "node:net";
 import { EventEmitter } from "node:events";
+import { createConnection, Socket, TcpSocketConnectOpts } from "node:net";
+import TypedEmitter from "typed-emitter";
+import { AsyncLock } from "./lock";
 
-export interface RconConnectOptions extends TcpNetConnectOpts {
+export interface RconConnectOptions extends TcpSocketConnectOpts {
   password: string;
 }
 
-export class RconClient extends EventEmitter {
-  readonly socket: Socket;
+type RconClientEvents = {
+  connect: () => void;
+  error: (err: Error) => void;
+  close: () => void;
+};
 
-  #lockPromise: Promise<void> = Promise.resolve();
+export class RconClient
+  extends (EventEmitter as new () => TypedEmitter<RconClientEvents>) {
+  static async connect(options: RconConnectOptions) {
+    const client = new RconClient(options);
+    await client.connect();
+    return client;
+  }
+
+  #options: RconConnectOptions;
+  #socket: Socket | null = null;
   #authed = false;
-  #reqId = 0;
-  #closed = false;
 
-  #readable: Promise<void>;
+  #lock = new AsyncLock();
+  #reqId = 0;
+
   #buffer = Buffer.alloc(0);
   #skipRead = false;
   #pos = 0;
 
-  static async connect(options: RconConnectOptions): Promise<RconClient> {
-    const socket = createConnection(options);
-
-    await new Promise((resolve, reject) => {
-      socket.once("connect", resolve);
-      socket.once("error", reject);
-    });
-
-    const client = new RconClient(socket);
-    await client.auth(options.password);
-
-    return client;
+  constructor(options: RconConnectOptions) {
+    super();
+    this.#options = options;
   }
 
-  constructor(socket: Socket) {
-    super();
-    this.socket = socket;
+  async connect() {
+    if (this.#socket) {
+      throw new Error(
+        this.#authed ? "Already connected" : "Already connecting",
+      );
+    }
 
-    // TODO: proper socket event handling
+    const socket = createConnection(this.#options);
+    socket.setNoDelay(true);
+    this.#socket = socket;
 
-    let resolveReadable: () => void;
-    this.#readable = new Promise((resolve) => resolveReadable = resolve);
+    socket.on("error", (err) => {
+      this.emit("error", err);
+    });
 
     socket.on("close", () => {
-      resolveReadable();
-      this.#closed = true;
       this.emit("close");
+      this.#socket = null;
+      this.#authed = false;
     });
 
-    socket.on("readable", () => {
-      resolveReadable();
-      this.#readable = new Promise((resolve) => resolveReadable = resolve);
+    await new Promise<void>((resolve, reject) => {
+      socket.on("connect", () => {
+        resolve();
+        socket.removeListener("error", reject);
+      });
+      socket.on("error", reject);
     });
-  }
 
-  async auth(password: string) {
-    if (this.#authed) throw new Error("Already authenticated");
-    const release = await this.#lock();
     try {
       const reqId = this.#nextReqId();
-      await this.#send(reqId, 3, password);
+      await this.#send(reqId, 3, this.#options.password);
 
       const res = await this.#recv();
       if (!res) throw new Error("Connection closed");
 
       if (res.id == -1) throw new Error("Authentication failed");
+
       if (res.id != reqId) {
         throw new Error(
           `Invalid response id (expected ${reqId}, got ${res.id})`,
         );
       }
+
       if (res.type != 2) {
         throw new Error(
           `Unexpected response type (expected 2, got ${res.type})`,
@@ -76,17 +88,26 @@ export class RconClient extends EventEmitter {
       }
 
       this.#authed = true;
-    } catch (e) {
-      await this.close();
-      throw e;
-    } finally {
-      release();
+    } catch (err) {
+      if (err instanceof Error) socket.destroy(err);
+      else socket.destroy();
+      this.#socket = null;
+      throw err;
     }
   }
 
-  async cmd(cmd: string): Promise<string | null> {
+  async close() {
+    if (!this.#socket) throw new Error("Not connected");
+    const socket = this.#socket;
+    await new Promise<void>((resolve) => {
+      socket.once("close", resolve);
+      socket.destroy();
+    });
+  }
+
+  async cmd(cmd: string): Promise<string> {
     if (!this.#authed) throw new Error("Not authenticated");
-    const release = await this.#lock();
+    const release = await this.#lock.acquire();
     try {
       const reqId = this.#nextReqId();
       await this.#send(reqId, 2, cmd);
@@ -94,7 +115,6 @@ export class RconClient extends EventEmitter {
       // By reading immediately after each write, we avoid packets being combined by the TCP stack,
       // thus avoiding an implementation bug in the Minecraft server
       const res = await this.#recv();
-      if (!res) return null;
 
       if (res.id != reqId) {
         throw new Error(
@@ -115,13 +135,12 @@ export class RconClient extends EventEmitter {
       }
 
       const dummyReqId = this.#nextReqId();
-      // send dummy request which is guaranteed to be not fragmented
+      // send a dummy request which is guaranteed to be not fragmented
       await this.#send(dummyReqId, -1, "");
 
       let output = res.message;
       while (true) {
         const res = await this.#recv();
-        if (!res) return null;
 
         // message is complete when dummy response is received
         if (res.id == dummyReqId) break;
@@ -140,21 +159,19 @@ export class RconClient extends EventEmitter {
         output += res.message;
       }
       return output;
-    } catch (e) {
-      if (!this.#closed) await this.close();
-      throw e;
+    } catch (err) {
+      if (err instanceof Error) this.#socket?.destroy(err);
+      else this.#socket?.destroy();
+      this.#socket = null;
+      throw err;
     } finally {
       release();
     }
   }
 
-  async close() {
-    this.#closed = true;
-    await new Promise<void>((resolve) => this.socket.end(resolve));
-  }
-
   async #send(id: number, type: number, message: string) {
-    if (this.#closed) throw new Error("Connection closed");
+    const socket = this.#socket;
+    if (!socket) throw new Error("Not connected");
     const payload = new TextEncoder().encode(message);
     const buf = new Uint8Array(14 + payload.length);
     const view = new DataView(buf.buffer);
@@ -166,19 +183,24 @@ export class RconClient extends EventEmitter {
     // therefore using RCON over anything other than localhost is not recommended
     if (buf.length > 1460) throw new Error("Message too long");
     await new Promise<void>((resolve, reject) =>
-      this.socket.write(buf, (err) => {
+      socket.write(buf, (err) => {
         if (err) reject(err);
         else resolve();
       })
     );
   }
 
-  async #recv(): Promise<{ id: number; type: number; message: string } | null> {
-    while (!this.#closed) {
+  async #recv(): Promise<{ id: number; type: number; message: string }> {
+    while (this.#socket) {
+      const socket = this.#socket;
       if (!this.#skipRead) {
-        await this.#readable;
-        const chunk = this.socket.read();
-        if (!chunk) continue;
+        const chunk = socket.read();
+        if (!chunk) {
+          await new Promise<void>((resolve) => {
+            socket.once("readable", resolve);
+          });
+          continue;
+        }
         this.#buffer = Buffer.concat([this.#buffer, chunk]);
         this.#pos += chunk.length;
       }
@@ -199,15 +221,7 @@ export class RconClient extends EventEmitter {
       this.#skipRead = true;
       return { id, type, message };
     }
-    return null;
-  }
-
-  #lock(): Promise<() => void> {
-    return new Promise((resolve) => {
-      this.#lockPromise = this.#lockPromise.then(() => {
-        return new Promise((release) => resolve(release));
-      });
-    });
+    throw new Error("Not connected");
   }
 
   #nextReqId() {

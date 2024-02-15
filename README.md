@@ -4,7 +4,7 @@ A simple and easy to use RCON client made to work with Minecraft servers.
 
 ## Usage
 
-```ts
+```js
 
 const client = await RconClient.connect({
   port: 25575,
