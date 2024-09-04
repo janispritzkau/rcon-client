@@ -131,7 +131,7 @@ export class Rcon {
         if (!this.socket.writable) throw new Error("End called twice")
         this.sendQueue.pause()
         this.socket.end()
-        await new Promise(resolve => this.on("end", resolve))
+        await new Promise(resolve => this.once("end", resolve))
     }
 
     /**
