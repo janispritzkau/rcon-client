@@ -47,7 +47,7 @@ await rcon.connect()
 rcon.end()
 ```
 
-More examples can be found inthe repository's [`examples/`](https://github.com/janispritzkau/rcon-client/tree/master/examples) folder.
+More examples can be found in the repository's [`examples/`](https://github.com/janispritzkau/rcon-client/tree/master/examples) folder.
 
 ## Events
 
