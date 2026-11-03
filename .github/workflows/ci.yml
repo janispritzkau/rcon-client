@@ -32,7 +32,7 @@ jobs:
           node -e "const { Rcon } = require('./dist/index.js'); if (typeof Rcon !== 'function') process.exit(1)"
 
   minecraft:
-    name: Minecraft ${{ matrix.server }}
+    name: Minecraft ${{ matrix.server }} ${{ matrix.version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
