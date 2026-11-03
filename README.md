@@ -60,7 +60,7 @@ import { RconError } from "rcon-client";
 try {
   await rcon.send("give @a diamond", { signal: AbortSignal.timeout(5000) });
 } catch (error) {
-  if (error instanceof RconError && !error.sent) {
+  if (error instanceof RconError && !error.sent && error.code === "TIMEOUT") {
     // The command definitely did not run, so it is safe to retry.
   }
 }
@@ -86,7 +86,7 @@ More examples are in [`examples/`](examples).
 | `port` | `25575` | |
 | `password` | required | |
 | `timeout` | `30000` | Default time a command may take, in milliseconds. Time spent in the queue and reconnecting counts. `0` disables it. |
-| `connectTimeout` | `10000` | Time for one TCP connect plus authentication. |
+| `connectTimeout` | `10000` | Time for one TCP connect plus authentication. `0` disables it. |
 | `reconnect` | `true` | Retry failed connects with backoff while commands wait. With `false`, a failed connect rejects the queue. |
 | `heartbeat` | `0` | When idle this long, send a ping. If no reply arrives in the same time, rebuild the connection. `0` disables it. |
 | `maxCommandBytes` | `1446` | Longer commands reject before they are sent. Minecraft closes the connection on anything longer. |
@@ -96,9 +96,9 @@ More examples are in [`examples/`](examples).
 - `Rcon.connect(options)`: creates a client, connects once, and rejects on failure.
 - `rcon.connect()`: connects now if not connected. Makes one attempt.
 - `rcon.send(command, { signal, timeout }?)`: resolves with the command's output.
-- `rcon.sendAll(commands, { signal, timeout }?)`: async generator of outputs, in order. It throws the first failure. Commands that were already queued at that point still run.
+- `rcon.sendAll(commands, { signal, timeout }?)`: async generator of outputs, in order, each yielded as soon as it arrives. At most 16 commands are queued ahead. It throws the first failure. Commands that were already queued at that point still run.
 - `rcon.ping({ signal, timeout }?)`: round trip in milliseconds. It runs after the command in flight but before queued commands. On Minecraft the RCON thread answers it, so it works while the main thread is busy.
-- `rcon.end()`: waits for queued commands to settle, then closes. Later calls to `send` reject with `CLOSED`.
+- `rcon.end()`: waits for queued commands to settle, then closes. If the server is unreachable, it makes one more connect attempt and then rejects what is left with `CONNECTION_FAILED`. Later calls to `send` reject with `CLOSED`.
 - `rcon[Symbol.asyncDispose]()`: same as `end()`.
 - `rcon.connected`: `true` while an authenticated connection is open.
 - `rcon.pending`: commands and pings that have not settled.
@@ -123,7 +123,7 @@ Every rejection is an `RconError` with `code` and `sent`. `sent: true` means the
 | `TIMEOUT` | either | No reply within the timeout. If the command was in flight, the connection is dropped, because its late reply would otherwise block the queue. |
 | `ABORTED` | either | The `signal` fired. Same as above. |
 | `CONNECTION_LOST` | `true` | The connection dropped before the full reply arrived. |
-| `CONNECTION_FAILED` | `false` | Could not connect, and retrying was not allowed (`Rcon.connect`, `connect()` or `reconnect: false`). |
+| `CONNECTION_FAILED` | `false` | Could not connect, and retrying was not allowed (`Rcon.connect`, `connect()`, `reconnect: false` or during `end()`). |
 | `AUTH_FAILED` | `false` | Wrong password. It is permanent, so the queue is rejected and the client does not retry in a loop. |
 | `COMMAND_TOO_LONG` | `false` | Longer than `maxCommandBytes`. |
 | `CLOSED` | `false` | `end()` was called. |
@@ -131,7 +131,9 @@ Every rejection is an `RconError` with `code` and `sent`. `sent: true` means the
 
 ## Things to know
 
-**Retrying.** The client never resends a command after it has been written to the socket. A command that timed out on the client may still have run on the server. Only retry automatically when `error.sent` is `false`, or when the command is safe to run twice.
+**Retrying.** The client never resends a command after it has been written to the socket. A command that timed out on the client may still have run on the server. Only retry automatically when `error.sent` is `false`, or when the command is safe to run twice. Do not retry `AUTH_FAILED`, `CLOSED` or `COMMAND_TOO_LONG`: they fail the same way every time.
+
+**Ping and heartbeat outside Minecraft.** `ping()` and `heartbeat` send a packet of an unknown type, which Minecraft answers right away. Servers that ignore unknown packets would never answer, so leave `heartbeat` off on other games until they are tested.
 
 **Acks during shutdown.** Minecraft keeps answering commands for a moment after `stop`. A reply at that point does not mean the change was saved: in one test, about 1,600 of 4,000 acknowledged commands were missing after the restart.
 

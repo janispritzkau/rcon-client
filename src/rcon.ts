@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { Connection, type ConnectionOptions } from "./connection.ts";
+import { isDelay } from "./delay.ts";
 import { RconError } from "./error.ts";
 
 export interface RconOptions {
@@ -15,7 +16,7 @@ export interface RconOptions {
    */
   timeout?: number;
   /**
-   * Time allowed for one TCP connect plus authentication.
+   * Time allowed for one TCP connect plus authentication. `0` disables it.
    * @default 10_000
    */
   connectTimeout?: number;
@@ -70,10 +71,12 @@ export interface RconEvents {
   end: [];
 }
 
-type Kind = "exec" | "ping" | "beat";
+type Kind = "exec" | "ping";
 
 interface Job {
   kind: Kind;
+  /** Heartbeats: no caller waits, so they never keep the process alive or delay `end()`. */
+  background: boolean;
   command: string;
   sent: boolean;
   done: boolean;
@@ -177,27 +180,49 @@ export class Rcon extends EventEmitter<RconEvents> {
   }
 
   /**
-   * Sends commands in order and yields their outputs in the same order. The
-   * iterable is read only as commands complete, so a large or endless source
-   * stays cheap. The first failure is thrown from the loop; commands already
-   * queued at that point still run.
+   * Sends commands in order and yields their outputs in the same order, each
+   * as soon as it arrives. At most 16 commands are queued ahead, so a large or
+   * endless source stays cheap. The first failure is thrown from the loop;
+   * commands already queued at that point still run.
    */
   async *sendAll(
     commands: Iterable<string> | AsyncIterable<string>,
     options?: SendOptions,
   ): AsyncGenerator<string, void, undefined> {
+    const iterator: Iterator<string> | AsyncIterator<string> = Symbol.asyncIterator in commands
+      ? commands[Symbol.asyncIterator]()
+      : commands[Symbol.iterator]();
     const window: Promise<string>[] = [];
-    const queue = (command: string) => {
-      const promise = this.send(command, options);
-      // Rejections are thrown when the loop reaches them, not reported early.
-      promise.catch(() => {});
-      window.push(promise);
-    };
-    for await (const command of commands) {
-      queue(command);
-      if (window.length >= 16) yield await window.shift()!;
+    let pull: Promise<IteratorResult<string>> | undefined;
+    let exhausted = false;
+    try {
+      for (;;) {
+        if (!exhausted && !pull && window.length < 16) pull = Promise.resolve(iterator.next());
+        const head = window[0];
+        // Wait for whichever comes first: the oldest reply or the next command.
+        const next = head && pull
+          ? await Promise.race([head.then(() => "reply", () => "reply"), pull.then(() => "source")])
+          : head ? "reply" : pull ? "source" : "done";
+        if (next === "done") return;
+        if (next === "reply") {
+          window.shift();
+          yield await head!;
+          continue;
+        }
+        const result = await pull!;
+        pull = undefined;
+        if (result.done) {
+          exhausted = true;
+          continue;
+        }
+        const promise = this.send(result.value, options);
+        // Rejections are thrown when the loop reaches them, not reported early.
+        promise.catch(() => {});
+        window.push(promise);
+      }
+    } finally {
+      if (!exhausted) await iterator.return?.();
     }
-    while (window.length) yield await window.shift()!;
   }
 
   /**
@@ -209,12 +234,19 @@ export class Rcon extends EventEmitter<RconEvents> {
     return this.#enqueue("ping", "", options) as Promise<number>;
   }
 
-  /** Waits for queued commands to settle, then closes the connection. */
+  /**
+   * Waits for queued commands to settle, then closes the connection. If the
+   * server is unreachable, makes one more attempt and then rejects the rest.
+   */
   end(): Promise<void> {
     this.#ended ??= (async () => {
       this.#stopHeartbeat();
-      for (const job of this.#urgent) if (job.kind === "beat") this.#settle(job);
+      const closed = new RconError("CLOSED", "Client is closed");
+      for (const job of this.#urgent) if (job.background) job.reject(closed);
+      // Skip the rest of a reconnect backoff: one more attempt, then give up.
+      this.#wake?.();
       while (this.#pending) await new Promise<void>((resolve) => this.#drained.push(resolve));
+      await this.#opening?.catch(() => {});
       this.#connection?.destroy();
       this.#connection = undefined;
       this.emit("end");
@@ -227,7 +259,7 @@ export class Rcon extends EventEmitter<RconEvents> {
     return this.end();
   }
 
-  #enqueue(kind: Kind, command: string, options: SendOptions = {}): Promise<string | number> {
+  #enqueue(kind: Kind, command: string, options: SendOptions = {}, background = false): Promise<string | number> {
     if (this.#ended) return Promise.reject(new RconError("CLOSED", "Client is closed"));
     const { signal, timeout = this.#options.timeout } = options;
     const { promise, resolve, reject } = Promise.withResolvers<string | number>();
@@ -245,6 +277,7 @@ export class Rcon extends EventEmitter<RconEvents> {
     };
     const job: Job = {
       kind,
+      background,
       command,
       sent: false,
       done: false,
@@ -256,15 +289,14 @@ export class Rcon extends EventEmitter<RconEvents> {
       },
     };
     signal?.addEventListener("abort", onAbort, { once: true });
-    if (timeout > 0 && Number.isFinite(timeout)) {
+    if (isDelay(timeout)) {
       timer = setTimeout(
         () => this.#fail(job, new RconError("TIMEOUT", `No reply within ${timeout}ms`, job.sent)),
         timeout,
       );
     }
 
-    if (kind === "beat") {
-      // Heartbeats never keep the process alive.
+    if (background) {
       timer?.unref();
       this.#urgent.push(job);
     } else {
@@ -288,7 +320,7 @@ export class Rcon extends EventEmitter<RconEvents> {
   #settle(job: Job): boolean {
     if (job.done) return false;
     job.done = true;
-    if (job.kind === "beat") return true;
+    if (job.background) return true;
     this.#release();
     if (--this.#pending === 0) {
       this.#wake?.();
@@ -370,7 +402,7 @@ export class Rcon extends EventEmitter<RconEvents> {
         return await this.#open();
       } catch (error) {
         const failure = toRconError(error);
-        if (failure.code === "AUTH_FAILED" || !this.#options.reconnect) {
+        if (failure.code === "AUTH_FAILED" || !this.#options.reconnect || this.#ended) {
           this.#rejectAll(failure);
           return undefined;
         }
@@ -384,14 +416,20 @@ export class Rcon extends EventEmitter<RconEvents> {
   #open(): Promise<Connection> {
     let connection: Connection | undefined;
     this.#opening ??= Connection.open(this.#connectionOptions(), (error) => {
+      if (!connection) return;
       if (this.#connection === connection) this.#connection = undefined;
       this.emit("disconnect", error);
       this.#stopHeartbeat();
-      if (this.#options.heartbeat > 0 && !this.#ended) {
+      if (isDelay(this.#options.heartbeat) && !this.#ended) {
         // Rebuild the connection in the background.
-        this.#enqueue("beat", "", { timeout: 0 }).catch(() => {});
+        this.#enqueue("ping", "", { timeout: 0 }, true).catch(() => {});
       }
     }).then((opened) => {
+      if (this.#ended && !this.#pending) {
+        // end() was called while connecting and nothing needs this connection.
+        opened.destroy();
+        throw new RconError("CLOSED", "Client is closed");
+      }
       connection = opened;
       this.#connection = opened;
       this.emit("connect");
@@ -433,10 +471,10 @@ export class Rcon extends EventEmitter<RconEvents> {
 
   #scheduleHeartbeat(): void {
     const { heartbeat } = this.#options;
-    if (!heartbeat || this.#ended || this.#running || !this.connected || this.#heartbeat) return;
+    if (!isDelay(heartbeat) || this.#ended || this.#running || !this.connected || this.#heartbeat) return;
     this.#heartbeat = setTimeout(() => {
       this.#heartbeat = undefined;
-      this.#enqueue("beat", "", { timeout: heartbeat }).catch(() => {});
+      this.#enqueue("ping", "", { timeout: heartbeat }, true).catch(() => {});
     }, heartbeat);
     this.#heartbeat.unref();
   }

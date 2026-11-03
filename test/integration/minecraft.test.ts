@@ -40,8 +40,10 @@ describe(`Minecraft server at ${RCON_HOST}:${RCON_PORT}`, { skip: !RCON_PORT && 
   });
 
   test("1000 parallel commands stay in order", async () => {
-    const replies = await Promise.all(Array.from({ length: 1000 }, (_, i) => rcon.send(`seed`).then((r) => [i, r] as const)));
-    for (const [, reply] of replies) assert.match(reply, /^Seed: \[-?\d+\]$/);
+    // Alternate two commands with different replies so a swap would show.
+    const commands = Array.from({ length: 1000 }, (_, i) => (i % 3 === 0 ? "seed" : "difficulty"));
+    const replies = await Promise.all(commands.map((command) => rcon.send(command)));
+    replies.forEach((reply, i) => assert.match(reply, commands[i] === "seed" ? /^Seed: / : /difficulty/i, `reply ${i}`));
   });
 
   test("a 1446-byte command is accepted", async () => {

@@ -1,5 +1,6 @@
 import { connect, type Socket } from "node:net";
 import { RconError } from "./error.ts";
+import { isDelay } from "./delay.ts";
 import { encodePacket, PacketReader, PacketType, type Packet } from "./packet.ts";
 
 /**
@@ -47,7 +48,8 @@ export class Connection {
     this.#socket = socket;
     socket.on("data", (chunk: Buffer) => this.#receive(chunk));
     socket.on("error", (error) => this.destroy(error));
-    socket.on("close", () => this.destroy());
+    // Only reached when the server closed first; destroy() ignores repeats.
+    socket.on("close", () => this.destroy(new Error("Connection closed by the server")));
   }
 
   /**
@@ -65,11 +67,10 @@ export class Connection {
         socket.destroy();
         reject(error);
       };
-      const timer = setTimeout(
-        () => fail(new Error(`Connect timed out after ${options.connectTimeout}ms`)),
-        options.connectTimeout,
-      );
-      timer.unref();
+      const timer = isDelay(options.connectTimeout)
+        ? setTimeout(() => fail(new Error(`Connect timed out after ${options.connectTimeout}ms`)), options.connectTimeout)
+        : undefined;
+      timer?.unref();
       socket.once("error", fail);
       socket.once("connect", async () => {
         socket.off("error", fail);

@@ -166,6 +166,20 @@ describe("command size", () => {
 });
 
 describe("rule 2 and 6: connecting and reconnecting", () => {
+  test("a server-side close is reported with an error", async () => {
+    const { fake, rcon } = await setup();
+    await rcon.send("a");
+    const disconnected = held(new Promise<Error | undefined>((resolve) => rcon.once("disconnect", resolve)));
+    fake.dropAll();
+    const error = await disconnected;
+    assert.ok(error instanceof Error, "error is set");
+  });
+
+  test("connectTimeout: 0 disables the connect timeout", async () => {
+    const { rcon } = await setup({}, { connectTimeout: 0 });
+    assert.equal(await rcon.send("list"), "ran list");
+  });
+
   test("Rcon.connect fails on the first error", async () => {
     const port = await freePort();
     await rejectsWith(Rcon.connect({ host: "127.0.0.1", port, password: "x" }), "CONNECTION_FAILED", false);
@@ -280,6 +294,12 @@ describe("rule 4: timeouts", () => {
     assert.deepEqual(fake.commands, ["first"]);
   });
 
+  test("a timeout beyond setTimeout's range means no limit", async () => {
+    const { rcon } = await setup({ handler: async (command) => (await wait(50), command) });
+    assert.equal(await rcon.send("x", { timeout: 30 * 24 * 3600_000 }), "x");
+    assert.equal(await rcon.send("y", { timeout: Infinity }), "y");
+  });
+
   test("an already aborted signal rejects at once", async () => {
     const { fake, rcon } = await setup();
     await rejectsWith(rcon.send("x", { signal: AbortSignal.abort() }), "ABORTED", false);
@@ -392,6 +412,28 @@ describe("end and dispose", () => {
     assert.equal(fake.connections, 0);
   });
 
+  test("end() during a connect leaves nothing open", async () => {
+    const { fake, rcon } = await setup();
+    const events: string[] = [];
+    for (const name of ["connect", "disconnect", "end"] as const) rcon.on(name, () => events.push(name));
+    const connecting = rcon.connect();
+    await rcon.end();
+    await assert.rejects(connecting);
+    await wait(20);
+    assert.equal(rcon.connected, false);
+    assert.equal(fake.sockets.size, 0);
+    assert.deepEqual(events, ["end"]);
+  });
+
+  test("end() gives up on a server that is down, even without timeouts", async () => {
+    const port = await freePort();
+    const rcon = new Rcon({ host: "127.0.0.1", port, password: "x", timeout: 0 });
+    const command = rcon.send("list");
+    await wait(300);
+    await held(rcon.end());
+    await rejectsWith(command, "CONNECTION_FAILED", false);
+  });
+
   test("Symbol.asyncDispose ends the client", async () => {
     const { rcon } = await setup();
     await rcon.send("x");
@@ -446,6 +488,21 @@ describe("sendAll", () => {
     let seen = 0;
     for await (const _ of rcon.sendAll(endless())) if (++seen === 100) break;
     assert.ok(pulled <= 100 + 16, `pulled ${pulled}`);
+  });
+
+  test("yields each reply as soon as it arrives from a slow source", async () => {
+    const { rcon } = await setup();
+    async function* slow() {
+      for (const command of ["a", "b", "c"]) {
+        yield command;
+        await wait(150);
+      }
+    }
+    const started = performance.now();
+    const times: number[] = [];
+    for await (const _ of rcon.sendAll(slow())) times.push(performance.now() - started);
+    assert.ok(times[0]! < 100, `first reply after ${times[0]}ms`);
+    assert.ok(times[1]! < 250, `second reply after ${times[1]}ms`);
   });
 
   test("throws the first failure", async () => {
