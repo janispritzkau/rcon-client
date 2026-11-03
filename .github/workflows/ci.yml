@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package loads through import and require
+        run: |
+          node --input-type=module -e "import { Rcon } from './dist/index.js'; if (typeof Rcon !== 'function') process.exit(1)"
+          node -e "const { Rcon } = require('./dist/index.js'); if (typeof Rcon !== 'function') process.exit(1)"
+
+  minecraft:
+    name: Minecraft ${{ matrix.server }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { server: vanilla, version: latest, java: 25 }
+          - { server: vanilla, version: 1.20.1, java: 17 }
+          - { server: vanilla, version: 1.16.5, java: 11 }
+          - { server: paper, version: latest, java: 25 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - run: npm ci
+      - name: Start server
+        run: node scripts/minecraft-server.ts ${{ matrix.server }} ${{ matrix.version }} "$RUNNER_TEMP/server"
+      - run: npm run test:integration
+        env:
+          RCON_PORT: 25575
+          RCON_PASSWORD: ci-password
