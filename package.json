@@ -1,34 +1,43 @@
 {
-    "name": "rcon-client",
-    "version": "4.2.5",
-    "description": "A modern RCON client made for Minecraft that features a packet queue",
-    "main": "lib",
-    "typings": "lib",
-    "scripts": {
-        "prepare": "npm run build && npm run test",
-        "build": "tsc",
-        "test": "jasmine"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/janispritzkau/rcon-client.git"
-    },
-    "keywords": [
-        "rcon",
-        "client",
-        "promise",
-        "typescript",
-        "minecraft",
-        "protocol"
-    ],
-    "author": "Janis Pritzkau <janispritzkau@gmail.com>",
-    "license": "MIT",
-    "dependencies": {
-        "typed-emitter": "^0.1.0"
-    },
-    "devDependencies": {
-        "@types/node": "^10.14.20",
-        "jasmine": "^3.5.0",
-        "typescript": "^3.6.3"
+  "name": "rcon-client",
+  "version": "5.0.0-beta.0",
+  "description": "A reliable RCON client for Minecraft and other Source RCON servers",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-timeout=30000 \"test/*.test.ts\"",
+    "test:integration": "node --test --test-timeout=120000 test/integration/*.test.ts",
+    "prepack": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janispritzkau/rcon-client.git"
+  },
+  "keywords": [
+    "rcon",
+    "client",
+    "minecraft",
+    "source",
+    "typescript",
+    "protocol"
+  ],
+  "author": "Janis Pritzkau <janispritzkau@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
 }
