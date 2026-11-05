@@ -46,7 +46,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "::notice::GitHub Release $tag already exists, nothing to do."
+            exit 0
+          fi
           flags=(--verify-tag --generate-notes)
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
-          gh release create "$GITHUB_REF_NAME" "${flags[@]}" \
-            --notes "Staged on npm. It becomes installable once a maintainer approves it with \`npm stage approve rcon-client@${GITHUB_REF_NAME#v}\`."
+          if [[ "$tag" == *-* ]]; then flags+=(--prerelease); fi
+          notes="Staged on npm. It becomes installable once a maintainer approves it with \`npm stage approve rcon-client@${tag#v}\`."
+          delays=(10 30)
+          for attempt in 1 2 3; do
+            if gh release create "$tag" "${flags[@]}" --notes "$notes"; then
+              exit 0
+            fi
+            if (( attempt == 3 )); then break; fi
+            delay=${delays[attempt - 1]}
+            echo "::warning::gh release create failed (attempt $attempt of 3), retrying in ${delay}s."
+            sleep "$delay"
+            if gh release view "$tag" > /dev/null 2>&1; then
+              echo "::notice::GitHub Release $tag exists after the failed attempt, nothing to do."
+              exit 0
+            fi
+          done
+          echo "::error::Could not create the GitHub Release for $tag after 3 attempts. The npm version is already staged, so do not re-run this job; create the release by hand with: gh release create $tag ${flags[*]}"
+          exit 1
