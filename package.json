@@ -23,7 +23,8 @@
     "test": "node --test --test-timeout=30000 \"test/*.test.ts\"",
     "test:integration": "node --test --test-timeout=120000 test/integration/*.test.ts",
     "prepack": "npm run build",
-    "check:package": "publint --strict && attw --pack --profile esm-only"
+    "check:package": "publint --strict && attw --pack --profile esm-only",
+    "lint": "oxlint --type-aware --deny-warnings"
   },
   "repository": {
     "type": "git",
@@ -42,6 +43,8 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@types/node": "^22.20.5",
+    "oxlint": "1.91.0",
+    "oxlint-tsgolint": "7.0.2006",
     "publint": "^0.3.25",
     "typescript": "^7.0.2"
   },

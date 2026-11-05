@@ -16,7 +16,7 @@ const { RCON_HOST = "127.0.0.1", RCON_PORT, RCON_PASSWORD = "", RCON_SERVER = "m
 const options = { host: RCON_HOST, port: Number(RCON_PORT), password: RCON_PASSWORD, timeout: 10_000 };
 
 /** Paper cuts long `data get` output and ends it with an ellipsis. */
-const truncated = (reply: string) => /\.\.\.$/.test(reply);
+const truncated = (reply: string) => reply.endsWith("...");
 
 describe(`Minecraft server at ${RCON_HOST}:${RCON_PORT}`, { skip: (!RCON_PORT && "RCON_PORT not set") || (RCON_SERVER !== "minecraft" && `RCON_SERVER is ${RCON_SERVER}`) }, () => {
   let rcon: Rcon;

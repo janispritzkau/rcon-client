@@ -45,7 +45,7 @@ async function held<T>(promise: Promise<T>): Promise<T> {
 
 function rejectsWith(promise: Promise<unknown>, code: string, sent?: boolean) {
   return assert.rejects(promise, (error: unknown) => {
-    assert.ok(error instanceof RconError, `expected RconError, got ${error}`);
+    assert.ok(error instanceof RconError, `expected RconError, got ${String(error)}`);
     assert.equal(error.code, code);
     if (sent !== undefined) assert.equal(error.sent, sent, "sent");
     return true;

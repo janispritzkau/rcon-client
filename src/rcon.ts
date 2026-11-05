@@ -222,8 +222,7 @@ export class Rcon extends EventEmitter<RconEvents> {
           : head ? "reply" : pull ? "source" : "done";
         if (next === "done") return;
         if (next === "reply") {
-          window.shift();
-          yield await head!;
+          yield await window.shift()!;
           continue;
         }
         const result = await pull!;
@@ -313,10 +312,14 @@ export class Rcon extends EventEmitter<RconEvents> {
       sent: false,
       done: false,
       resolve: (value) => {
-        if (this.#settle(job)) cleanup(), resolve(value);
+        if (!this.#settle(job)) return;
+        cleanup();
+        resolve(value);
       },
       reject: (error) => {
-        if (this.#settle(job)) cleanup(), reject(error);
+        if (!this.#settle(job)) return;
+        cleanup();
+        reject(error);
       },
     };
     signal?.addEventListener("abort", onAbort, { once: true });
