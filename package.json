@@ -3,11 +3,13 @@
   "version": "5.0.0-beta.0",
   "description": "A reliable RCON client for Minecraft and other Source RCON servers",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -20,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-timeout=30000 \"test/*.test.ts\"",
     "test:integration": "node --test --test-timeout=120000 test/integration/*.test.ts",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "check:package": "publint --strict && attw --pack --profile esm-only"
   },
   "repository": {
     "type": "git",
@@ -37,7 +40,14 @@
   "author": "Janis Pritzkau <janispritzkau@gmail.com>",
   "license": "MIT",
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@types/node": "^22.20.5",
+    "publint": "^0.3.25",
     "typescript": "^7.0.2"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bugs": "https://github.com/janispritzkau/rcon-client/issues",
+  "homepage": "https://github.com/janispritzkau/rcon-client#readme"
 }

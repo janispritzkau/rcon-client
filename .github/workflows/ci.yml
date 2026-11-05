@@ -26,6 +26,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # publint and attw check the packed tarball. attw's esm-only profile
+      # skips require(), so the step below still runs it for real.
+      - run: npm run check:package
       - name: Package loads through import and require
         run: |
           node --input-type=module -e "import { Rcon } from './dist/index.js'; if (typeof Rcon !== 'function') process.exit(1)"
