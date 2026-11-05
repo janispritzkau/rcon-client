@@ -36,9 +36,11 @@ export interface RconOptions {
    */
   heartbeat?: number;
   /**
-   * Longest command, in UTF-8 bytes. Minecraft closes the connection on
-   * anything longer than 1446 bytes. Longer commands reject with
-   * `COMMAND_TOO_LONG` before they are sent.
+   * Longest command, in UTF-8 bytes. Longer commands reject with
+   * `COMMAND_TOO_LONG` before they are sent. Minecraft closes the connection
+   * on anything over 1446 bytes. Source servers allow 1014 by default and ban
+   * the address after oversized packets, so when this option is not set and
+   * the server turns out to be a Source server, the limit drops to 1014.
    * @default 1446
    */
   maxCommandBytes?: number;
@@ -95,6 +97,9 @@ const DEFAULTS = {
   maxCommandBytes: 1446,
 };
 
+/** Source's default `sv_rcon_maxpacketsize` of 1024, minus the 10-byte header. */
+const SOURCE_MAX_COMMAND_BYTES = 1014;
+
 export class Rcon extends EventEmitter<RconEvents> {
   /**
    * Creates a client and connects right away. Rejects on the first failure,
@@ -107,6 +112,8 @@ export class Rcon extends EventEmitter<RconEvents> {
   }
 
   readonly #options: Required<RconOptions>;
+  /** `false` if the caller set `maxCommandBytes`, so it must not be lowered for Source. */
+  readonly #autoLimit: boolean;
   /** Pings and heartbeats run before queued commands. */
   #urgent: Job[] = [];
   #queue: Job[] = [];
@@ -132,6 +139,7 @@ export class Rcon extends EventEmitter<RconEvents> {
       Object.entries(options).filter(([, value]) => value !== undefined),
     );
     this.#options = { ...DEFAULTS, ...defined } as Required<RconOptions>;
+    this.#autoLimit = options.maxCommandBytes === undefined;
   }
 
   /** `true` while an authenticated connection is open. */
@@ -370,6 +378,16 @@ export class Rcon extends EventEmitter<RconEvents> {
         if (!connection) continue;
         const job = this.#take();
         if (!job) break;
+        if (job.kind === "exec" && this.#autoLimit && connection.source) {
+          const bytes = Buffer.byteLength(job.command);
+          if (bytes > SOURCE_MAX_COMMAND_BYTES) {
+            job.reject(new RconError(
+              "COMMAND_TOO_LONG",
+              `Command is ${bytes} bytes, the limit on Source servers is ${SOURCE_MAX_COMMAND_BYTES}`,
+            ));
+            continue;
+          }
+        }
         job.sent = true;
         job.connection = connection;
         try {

@@ -4,7 +4,7 @@
 [![downloads](https://img.shields.io/npm/dm/rcon-client.svg)](https://www.npmjs.com/package/rcon-client)
 
 An RCON client for Node.js that is safe for short scripts and long-running bots.
-It is tested against Minecraft and has no runtime dependencies.
+It is tested against Minecraft, Factorio and Source servers, and has no runtime dependencies.
 
 - Commands run one at a time, in order, so `Promise.all` is safe.
 - Long replies that the server splits into fragments arrive whole.
@@ -89,7 +89,7 @@ More examples are in [`examples/`](examples).
 | `connectTimeout` | `10000` | Time for one TCP connect plus authentication. `0` disables it. |
 | `reconnect` | `true` | Retry failed connects with backoff while commands wait. With `false`, a failed connect rejects the queue. |
 | `heartbeat` | `0` | When idle this long, send a ping. If no reply arrives in the same time, rebuild the connection. `0` disables it. |
-| `maxCommandBytes` | `1446` | Longer commands reject before they are sent. Minecraft closes the connection on anything longer. |
+| `maxCommandBytes` | `1446` | Longer commands reject before they are sent. Minecraft closes the connection on anything longer. If you leave it unset and the server is a Source server, the limit drops to 1014 (see below). Factorio has no limit, so raise it there if you need to. |
 
 ### Methods and properties
 
@@ -97,7 +97,7 @@ More examples are in [`examples/`](examples).
 - `rcon.connect()`: connects now if not connected. Makes one attempt.
 - `rcon.send(command, { signal, timeout }?)`: resolves with the command's output.
 - `rcon.sendAll(commands, { signal, timeout }?)`: async generator of outputs, in order, each yielded as soon as it arrives. At most 16 commands are queued ahead. It throws the first failure. Commands that were already queued at that point still run.
-- `rcon.ping({ signal, timeout }?)`: round trip in milliseconds. It runs after the command in flight but before queued commands. On Minecraft the RCON thread answers it, so it works while the main thread is busy.
+- `rcon.ping({ signal, timeout }?)`: round trip in milliseconds. It runs after the command in flight but before queued commands. On Minecraft and Factorio it is answered outside the game loop, so it works while the server is busy.
 - `rcon.end()`: waits for queued commands to settle, then closes. If the server is unreachable, it makes one more connect attempt and then rejects what is left with `CONNECTION_FAILED`. Later calls to `send` reject with `CLOSED`.
 - `rcon[Symbol.asyncDispose]()`: same as `end()`.
 - `rcon.connected`: `true` while an authenticated connection is open.
@@ -133,13 +133,15 @@ Every rejection is an `RconError` with `code` and `sent`. `sent: true` means the
 
 **Retrying.** The client never resends a command after it has been written to the socket. A command that timed out on the client may still have run on the server. Only retry automatically when `error.sent` is `false`, or when the command is safe to run twice. Do not retry `AUTH_FAILED`, `CLOSED` or `COMMAND_TOO_LONG`: they fail the same way every time.
 
-**Ping and heartbeat outside Minecraft.** `ping()` and `heartbeat` send a packet of an unknown type, which Minecraft answers right away. Servers that ignore unknown packets would never answer, so leave `heartbeat` off on other games until they are tested.
+**How ping works.** `ping()`, `heartbeat` and the end marker for long replies all send the password again. Every tested server answers that in order, and none of them logs it. Packets of an unknown type would not work: Factorio ignores them and logs an error for each one.
+
+**Source servers ban addresses.** By default, Source allows commands up to 1014 bytes (`sv_rcon_maxpacketsize 1024`, minus the header) and bans the sender's address after oversized packets (`sv_rcon_maxpacketbans`). The client detects Source servers when it connects and then rejects longer commands with `COMMAND_TOO_LONG`, unless you set `maxCommandBytes` yourself. Wrong passwords count toward a ban too (`sv_rcon_maxfailures`, default 10). The client does not retry `AUTH_FAILED`, but a script that restarts in a loop with a wrong password can still get banned. With `sv_rcon_banpenalty 0`, the default, the ban is permanent until the server restarts, or longer if the ban list is saved.
 
 **Acks during shutdown.** Minecraft keeps answering commands for a moment after `stop`. A reply at that point does not mean the change was saved: in one test, about 1,600 of 4,000 acknowledged commands were missing after the restart.
 
 **Parallel connections on vanilla Minecraft.** Vanilla servers collect command output in one buffer that all RCON connections share. If two connections run commands at the same moment, they can receive each other's output, an empty reply, or both joined together. The commands still run, but replies can be wrong. In a stress test with two connections, half of the replies were wrong. This also happens when two separate programs connect to the same server. One `Rcon` instance uses one connection, so it is not affected alone. Paper does not have this problem.
 
-**Speed.** Each command waits for its reply before the next is sent (Minecraft closes the connection otherwise), so the round-trip time sets the limit: about 20,000 commands/s on localhost, but only about 50/s over a 20 ms link.
+**Speed.** Each command waits for its reply before the next is sent (Minecraft closes the connection otherwise), so the round-trip time sets the limit. On Minecraft that is about 20,000 commands/s on localhost, but only about 50/s over a 20 ms link. Factorio runs one RCON command per game tick, so it handles about 60 commands/s. The tested Source servers took about 45 ms per command, about 22/s.
 
 **Long-running commands.** A large `fill` can freeze a Minecraft server for over 10 seconds. The default timeout is 30 seconds for that reason.
 
@@ -149,9 +151,12 @@ Only setups that were actually tested are listed here.
 
 | Server | Status |
 |---|---|
-| Minecraft Java 1.16.5, 1.20.1, 26.3 (vanilla) | Tested, including fragmented replies |
-| Paper 1.21.11, 26.3 | Tested |
-| Factorio, Source games (CS, L4D2), Palworld, others | Expected to work but not tested yet. Reports are welcome. |
+| Minecraft Java 1.16.5, 1.20.1, 26.3 (vanilla) | Tested in CI, including fragmented replies |
+| Paper 1.21.11, 26.3 | Tested in CI |
+| Factorio 2.1 | Tested in CI, including 1 MB replies |
+| Counter-Strike: Source | Tested in CI, including fragmented replies |
+| Half-Life 2: Deathmatch | Tested once, same results as CS:S |
+| CS2, L4D2, TF2, Palworld, Rust, ARK, others | Not tested. Reports are welcome. |
 
 Runtimes: Node.js 22, 24 and 26 (both `import` and `require()`), Deno 2 and Bun 1.
 

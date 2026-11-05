@@ -4,18 +4,12 @@ import { isDelay } from "./delay.ts";
 import { encodePacket, PacketReader, PacketType, type Packet } from "./packet.ts";
 
 /**
- * Minecraft answers any unknown packet type with "Unknown request ffffffff"
- * from the RCON thread, without touching the main thread.
- */
-const PING_TYPE = -1;
-
-/**
  * Minecraft splits long replies every 4096 UTF-16 units and sends no end
- * marker. Source splits on bytes, a bit below 4096. A reply below both limits
- * cannot have more fragments.
+ * marker, so a shorter first packet is the whole reply. Source splits on line
+ * boundaries, so its fragments can be much shorter; Source connections always
+ * send a probe instead.
  */
 const FRAGMENT_UNITS = 4096;
-const FRAGMENT_BYTES = 4000;
 
 export interface ConnectionOptions {
   host: string;
@@ -38,14 +32,17 @@ interface Waiter {
  */
 export class Connection {
   readonly #socket: Socket;
+  readonly #password: string;
   readonly #reader = new PacketReader();
   #waiter: Waiter | undefined;
   #id = 0;
   #error: Error | undefined;
   #onClose: ((error?: Error) => void) | undefined;
+  #source = false;
 
-  private constructor(socket: Socket) {
+  private constructor(socket: Socket, password: string) {
     this.#socket = socket;
+    this.#password = password;
     socket.on("data", (chunk: Buffer) => this.#receive(chunk));
     socket.on("error", (error) => this.destroy(error));
     // Only reached when the server closed first; destroy() ignores repeats.
@@ -76,9 +73,9 @@ export class Connection {
         socket.off("error", fail);
         socket.setNoDelay(true);
         socket.setKeepAlive(true, 30_000);
-        const connection = new Connection(socket);
+        const connection = new Connection(socket, options.password);
         try {
-          await connection.#authenticate(options.password);
+          await connection.#authenticate();
           clearTimeout(timer);
           if (!connection.alive) throw connection.#error;
           connection.#onClose = onClose;
@@ -96,20 +93,38 @@ export class Connection {
     return this.#error === undefined;
   }
 
+  /**
+   * `true` if the server behaves like a Source dedicated server: it sent an
+   * empty RESPONSE_VALUE before the AUTH_RESPONSE. Minecraft and Factorio
+   * do not.
+   */
+  get source(): boolean {
+    return this.#source;
+  }
+
   async exec(command: string): Promise<string> {
     const id = this.#send(PacketType.Command, command);
-    const first = await this.#reply(id);
-    const text = first.body.toString("utf8");
-    if (text.length < FRAGMENT_UNITS && first.body.length < FRAGMENT_BYTES) return text;
-
-    // The reply may continue. Every fragment was written before the server
-    // read our next packet, so the reply to this probe marks the end. The
-    // probe goes out only now, after the first fragment, never earlier.
-    const probe = this.#send(PacketType.Response, "");
-    const parts = [first.body];
+    let probe: number;
+    const parts: Buffer[] = [];
+    if (this.#source) {
+      // Source reads pipelined requests in order, so the probe can follow
+      // right away and costs no extra round trip.
+      probe = this.#sendProbe();
+    } else {
+      const first = await this.#reply(id);
+      const text = first.body.toString("utf8");
+      if (text.length < FRAGMENT_UNITS) return text;
+      // The reply may continue. Every fragment was written before the server
+      // read our next packet, so the reply to this probe marks the end.
+      // Minecraft closes the connection on pipelined requests, so the probe
+      // goes out only now, after the first fragment, never earlier.
+      probe = this.#sendProbe();
+      parts.push(first.body);
+    }
     for (;;) {
       const packet = await this.#next();
       if (packet.id === probe) break;
+      if (packet.id === -1) throw this.#authLost();
       if (packet.id === id) parts.push(packet.body);
     }
     // Decode once so a UTF-8 sequence split on a byte boundary survives.
@@ -119,7 +134,12 @@ export class Connection {
   /** Round trip in milliseconds, measured from the write. */
   async ping(): Promise<number> {
     const started = performance.now();
-    await this.#reply(this.#send(PING_TYPE, ""));
+    const id = this.#sendProbe();
+    for (;;) {
+      const packet = await this.#next();
+      if (packet.id === id) break;
+      if (packet.id === -1) throw this.#authLost();
+    }
     return performance.now() - started;
   }
 
@@ -133,13 +153,16 @@ export class Connection {
     this.#onClose?.(error);
   }
 
-  async #authenticate(password: string): Promise<void> {
-    const id = this.#send(PacketType.Auth, password);
+  async #authenticate(): Promise<void> {
+    const id = this.#send(PacketType.Auth, this.#password);
     // Source sends an empty RESPONSE_VALUE before the AUTH_RESPONSE, so wait
     // for the packet that carries the verdict.
     for (;;) {
       const packet = await this.#next();
-      if (packet.type !== PacketType.Command) continue;
+      if (packet.type !== PacketType.Command) {
+        if (packet.id === id && packet.type === PacketType.Response) this.#source = true;
+        continue;
+      }
       if (packet.id === -1) throw new RconError("AUTH_FAILED", "Wrong RCON password");
       if (packet.id === id) return;
     }
@@ -152,6 +175,23 @@ export class Connection {
       // reply) carry older ids and are skipped.
       if (packet.id === id) return packet;
     }
+  }
+
+  /**
+   * Sends the password again. Every tested server answers this in order and
+   * without touching its main thread, so the reply serves as a ping and as
+   * the end marker for fragmented replies. Unknown packet types do not work
+   * for this: Factorio ignores them.
+   */
+  #sendProbe(): number {
+    return this.#send(PacketType.Auth, this.#password);
+  }
+
+  /** The server rejected the repeated password, so it changed since connect. */
+  #authLost(): RconError {
+    const error = new RconError("AUTH_FAILED", "Wrong RCON password");
+    this.destroy(error);
+    return error;
   }
 
   #send(type: number, body: string): number {

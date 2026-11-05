@@ -59,3 +59,49 @@ jobs:
         env:
           RCON_PORT: 25575
           RCON_PASSWORD: ci-password
+
+  factorio:
+    name: Factorio stable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Start server
+        run: scripts/factorio-server.sh "$RUNNER_TEMP/factorio"
+      - run: npm run test:integration
+        env:
+          RCON_SERVER: factorio
+          RCON_PORT: 27015
+          RCON_PASSWORD: ci-password
+
+  source:
+    name: Source ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: CS:S, app: 232330, game: cstrike, map: de_dust2 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install 32-bit libraries
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo apt-get install -yq lib32gcc-s1 lib32stdc++6 > /dev/null
+      - name: Start server
+        run: scripts/source-server.sh ${{ matrix.app }} ${{ matrix.game }} ${{ matrix.map }} "$RUNNER_TEMP/srcds"
+      - run: npm run test:integration
+        env:
+          RCON_SERVER: source
+          RCON_PORT: 27015
+          RCON_PASSWORD: ci-password

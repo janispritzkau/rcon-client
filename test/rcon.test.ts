@@ -468,6 +468,88 @@ describe("heartbeat", () => {
   });
 });
 
+describe("servers that ignore unknown packet types (Factorio)", () => {
+  const factorio = { ignoreUnknown: true, fragment: Infinity, maxPayload: Infinity };
+
+  test("ping is answered", async () => {
+    const { rcon } = await setup(factorio);
+    const ms = await rcon.ping({ timeout: 1000 });
+    assert.ok(ms >= 0 && ms < 1000, `${ms}ms`);
+  });
+
+  test("a long reply sent as one packet does not hang", async () => {
+    const { rcon } = await setup({ ...factorio, handler: () => "x".repeat(30_000) });
+    assert.equal((await rcon.send("big", { timeout: 1000 })).length, 30_000);
+    assert.equal(await rcon.send("big", { timeout: 1000 }).then((reply) => reply.length), 30_000);
+  });
+
+  test("heartbeat keeps a healthy connection", async () => {
+    const { fake, rcon } = await setup(factorio, { heartbeat: 50 });
+    await rcon.connect();
+    await held(wait(300));
+    assert.equal(rcon.connected, true);
+    assert.equal(fake.connections, 1);
+  });
+});
+
+describe("Source servers", () => {
+  const lines = (count: number, width: number) =>
+    Array.from({ length: count }, (_, i) => `${String(i).padStart(4, "0")} ${"x".repeat(width - 6)}\n`).join("");
+
+  test("a reply split into short fragments arrives whole", async () => {
+    // Lines of 1500 bytes give fragments of 3000 bytes, well below 4096.
+    const output = lines(10, 1500);
+    const { rcon } = await setup({ source: true, handler: () => output });
+    assert.equal(await rcon.send("cvarlist"), output);
+  });
+
+  test("replies of every size stay matched to their commands", async () => {
+    const outputs = [lines(1, 50), lines(40, 120), "", lines(3, 4000), lines(200, 37)];
+    const { rcon } = await setup({ source: true, handler: (command) => outputs[Number(command)]! });
+    const commands = Array.from({ length: 50 }, (_, i) => String(i % outputs.length));
+    const replies = await Promise.all(commands.map((command) => rcon.send(command)));
+    replies.forEach((reply, i) => assert.equal(reply, outputs[Number(commands[i])], `reply ${i}`));
+  });
+
+  test("multi-byte characters split across fragments survive", async () => {
+    const output = "€".repeat(5000);
+    const { rcon } = await setup({ source: true, handler: () => output });
+    assert.equal(await rcon.send("x"), output);
+  });
+
+  test("commands over 1014 bytes reject before they can get the address banned", async () => {
+    const { fake, rcon } = await setup({ source: true, maxPayload: 1014 });
+    assert.equal(await rcon.send("x".repeat(1014)), `ran ${"x".repeat(1014)}`);
+    await rejectsWith(rcon.send("x".repeat(1015)), "COMMAND_TOO_LONG", false);
+    assert.equal(fake.banned, false);
+    assert.equal(await rcon.send("list"), "ran list");
+  });
+
+  test("an explicit maxCommandBytes is kept", async () => {
+    const { rcon } = await setup({ source: true, maxPayload: 2000 }, { maxCommandBytes: 2000 });
+    assert.equal((await rcon.send("x".repeat(2000))).length, 2004);
+  });
+
+  test("ping and heartbeat work", async () => {
+    const { fake, rcon } = await setup({ source: true }, { heartbeat: 50 });
+    assert.ok((await rcon.ping({ timeout: 1000 })) < 1000);
+    await held(wait(300));
+    assert.equal(rcon.connected, true);
+    assert.equal(fake.connections, 1);
+    assert.equal(await rcon.send("list"), "ran list");
+  });
+});
+
+describe("password changed while connected", () => {
+  test("a ping fails and the client stops retrying", async () => {
+    const { fake, rcon } = await setup();
+    await rcon.connect();
+    fake.options.password = "changed";
+    await assert.rejects(rcon.ping({ timeout: 1000 }));
+    await rejectsWith(rcon.send("list", { timeout: 1000 }), "AUTH_FAILED");
+  });
+});
+
 describe("sendAll", () => {
   test("yields results in order", async () => {
     const { rcon } = await setup();

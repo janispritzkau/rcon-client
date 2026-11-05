@@ -1,5 +1,6 @@
 /**
- * Runs against a real Minecraft server. Skipped unless RCON_PORT is set.
+ * Runs against a real Minecraft server. Skipped unless RCON_PORT is set and
+ * RCON_SERVER is unset or "minecraft".
  *
  *   RCON_HOST=127.0.0.1 RCON_PORT=25575 RCON_PASSWORD=... npm run test:integration
  *
@@ -10,13 +11,13 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { Rcon, RconError } from "../../src/index.ts";
 
-const { RCON_HOST = "127.0.0.1", RCON_PORT, RCON_PASSWORD = "" } = process.env;
+const { RCON_HOST = "127.0.0.1", RCON_PORT, RCON_PASSWORD = "", RCON_SERVER = "minecraft" } = process.env;
 const options = { host: RCON_HOST, port: Number(RCON_PORT), password: RCON_PASSWORD };
 
 /** Paper cuts long `data get` output and ends it with an ellipsis. */
 const truncated = (reply: string) => /\.\.\.$/.test(reply);
 
-describe(`Minecraft server at ${RCON_HOST}:${RCON_PORT}`, { skip: !RCON_PORT && "RCON_PORT not set" }, () => {
+describe(`Minecraft server at ${RCON_HOST}:${RCON_PORT}`, { skip: (!RCON_PORT && "RCON_PORT not set") || (RCON_SERVER !== "minecraft" && `RCON_SERVER is ${RCON_SERVER}`) }, () => {
   let rcon: Rcon;
   before(async () => {
     rcon = await Rcon.connect(options);
