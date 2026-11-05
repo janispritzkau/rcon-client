@@ -2,6 +2,25 @@
   "name": "rcon-client",
   "version": "5.0.0-beta.0",
   "description": "A reliable RCON client for Minecraft and other Source RCON servers",
+  "keywords": [
+    "client",
+    "minecraft",
+    "protocol",
+    "rcon",
+    "source",
+    "typescript"
+  ],
+  "homepage": "https://github.com/janispritzkau/rcon-client#readme",
+  "bugs": "https://github.com/janispritzkau/rcon-client/issues",
+  "license": "MIT",
+  "author": "Janis Pritzkau <janispritzkau@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janispritzkau/rcon-client.git"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -11,11 +30,8 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
-  "engines": {
-    "node": ">=22.12"
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -24,33 +40,20 @@
     "test:integration": "node --test --test-timeout=120000 test/integration/*.test.ts",
     "prepack": "npm run build",
     "check:package": "publint --strict && attw --pack --profile esm-only",
-    "lint": "oxlint --type-aware --deny-warnings"
+    "lint": "oxlint --type-aware --deny-warnings",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/janispritzkau/rcon-client.git"
-  },
-  "keywords": [
-    "rcon",
-    "client",
-    "minecraft",
-    "source",
-    "typescript",
-    "protocol"
-  ],
-  "author": "Janis Pritzkau <janispritzkau@gmail.com>",
-  "license": "MIT",
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@types/node": "^22.20.5",
+    "oxfmt": "0.76.0",
     "oxlint": "1.91.0",
     "oxlint-tsgolint": "7.0.2006",
     "publint": "^0.3.25",
     "typescript": "^7.0.2"
   },
-  "publishConfig": {
-    "access": "public"
-  },
-  "bugs": "https://github.com/janispritzkau/rcon-client/issues",
-  "homepage": "https://github.com/janispritzkau/rcon-client#readme"
+  "engines": {
+    "node": ">=22.12"
+  }
 }
