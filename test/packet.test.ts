@@ -13,14 +13,25 @@ describe("PacketReader", () => {
   });
 
   test("reassembles packets split at every byte and joined together", () => {
-    const stream = Buffer.concat([encodePacket(1, 0, "first"), encodePacket(-1, 2, ""), encodePacket(3, 0, "€")]);
+    const stream = Buffer.concat([
+      encodePacket(1, 0, "first"),
+      encodePacket(-1, 2, ""),
+      encodePacket(3, 0, "€"),
+    ]);
     const reader = new PacketReader();
     const packets = [];
     for (const byte of stream) {
       reader.push(Buffer.from([byte]));
       for (let packet; (packet = reader.read());) packets.push(packet);
     }
-    assert.deepEqual(packets.map((p) => [p.id, p.type, p.body.toString()]), [[1, 0, "first"], [-1, 2, ""], [3, 0, "€"]]);
+    assert.deepEqual(
+      packets.map((p) => [p.id, p.type, p.body.toString()]),
+      [
+        [1, 0, "first"],
+        [-1, 2, ""],
+        [3, 0, "€"],
+      ],
+    );
   });
 
   test("rejects impossible lengths", () => {
@@ -44,7 +55,7 @@ describe("Source-style servers", () => {
             socket.write(encodePacket(packet.id, 0, ""));
             socket.write(encodePacket(packet.body.toString() === password ? packet.id : -1, 2, ""));
           } else if (packet.type === 2) {
-            socket.write(encodePacket(packet.id, 0, `ok ${packet.body}`));
+            socket.write(encodePacket(packet.id, 0, `ok ${packet.body.toString()}`));
           } else if (packet.type === 0) {
             socket.write(encodePacket(packet.id, 0, ""));
             socket.write(encodePacket(packet.id, 0, Buffer.from([0, 1, 0, 0])));

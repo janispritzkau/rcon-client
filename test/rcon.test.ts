@@ -45,7 +45,7 @@ async function held<T>(promise: Promise<T>): Promise<T> {
 
 function rejectsWith(promise: Promise<unknown>, code: string, sent?: boolean) {
   return assert.rejects(promise, (error: unknown) => {
-    assert.ok(error instanceof RconError, `expected RconError, got ${error}`);
+    assert.ok(error instanceof RconError, `expected RconError, got ${String(error)}`);
     assert.equal(error.code, code);
     if (sent !== undefined) assert.equal(error.sent, sent, "sent");
     return true;
@@ -77,7 +77,9 @@ describe("basics", () => {
   });
 
   test("keeps empty replies and unicode intact", async () => {
-    const { rcon } = await setup({ handler: (command) => (command === "empty" ? "" : `→ ${command} ✓`) });
+    const { rcon } = await setup({
+      handler: (command) => (command === "empty" ? "" : `→ ${command} ✓`),
+    });
     assert.equal(await rcon.send("empty"), "");
     assert.equal(await rcon.send("töst €"), "→ töst € ✓");
   });
@@ -121,12 +123,23 @@ describe("rule 1: one at a time, in order", () => {
 });
 
 describe("fragmented replies", () => {
-  for (const [length, fragments] of [[4095, 1], [4096, 1], [4097, 2], [8192, 2], [8193, 3], [20_000, 5]] as const) {
+  for (const [length, fragments] of [
+    [4095, 1],
+    [4096, 1],
+    [4097, 2],
+    [8192, 2],
+    [8193, 3],
+    [20_000, 5],
+  ] as const) {
     test(`${length} characters arrive whole (${fragments} fragments)`, async () => {
       const output = Array.from({ length }, (_, i) => String.fromCharCode(97 + (i % 26))).join("");
       const { fake, rcon } = await setup({ handler: () => output });
       assert.equal(await rcon.send("big"), output);
-      assert.equal(await rcon.send("small"), output, "the next command is not confused by leftovers");
+      assert.equal(
+        await rcon.send("small"),
+        output,
+        "the next command is not confused by leftovers",
+      );
       assert.deepEqual(fake.violations, []);
     });
   }
@@ -140,7 +153,9 @@ describe("fragmented replies", () => {
   test("a fragmented reply in the middle of a busy queue", async () => {
     const big = "x".repeat(9200);
     const { rcon } = await setup({ handler: (command) => (command === "big" ? big : command) });
-    const replies = await Promise.all(["a", "big", "b", "big", "c"].map((command) => rcon.send(command)));
+    const replies = await Promise.all(
+      ["a", "big", "b", "big", "c"].map((command) => rcon.send(command)),
+    );
     assert.deepEqual(replies, ["a", big, "b", big, "c"]);
   });
 });
@@ -169,7 +184,9 @@ describe("rule 2 and 6: connecting and reconnecting", () => {
   test("a server-side close is reported with an error", async () => {
     const { fake, rcon } = await setup();
     await rcon.send("a");
-    const disconnected = held(new Promise<Error | undefined>((resolve) => rcon.once("disconnect", resolve)));
+    const disconnected = held(
+      new Promise<Error | undefined>((resolve) => rcon.once("disconnect", resolve)),
+    );
     fake.dropAll();
     const error = await disconnected;
     assert.ok(error instanceof Error, "error is set");
@@ -182,7 +199,11 @@ describe("rule 2 and 6: connecting and reconnecting", () => {
 
   test("Rcon.connect fails on the first error", async () => {
     const port = await freePort();
-    await rejectsWith(Rcon.connect({ host: "127.0.0.1", port, password: "x" }), "CONNECTION_FAILED", false);
+    await rejectsWith(
+      Rcon.connect({ host: "127.0.0.1", port, password: "x" }),
+      "CONNECTION_FAILED",
+      false,
+    );
   });
 
   test("new Rcon keeps retrying until the command's deadline", async () => {
@@ -255,7 +276,10 @@ describe("rule 4: timeouts", () => {
     await rcon.connect();
     t.mock.timers.enable({ apis: ["setTimeout"] });
     let outcome = "pending";
-    const settled = rcon.send("fill").then(() => (outcome = "resolved"), (error: RconError) => (outcome = error.code));
+    const settled = rcon.send("fill").then(
+      () => (outcome = "resolved"),
+      (error: RconError) => (outcome = error.code),
+    );
     t.mock.timers.tick(29_999);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(outcome, "pending");
@@ -279,7 +303,11 @@ describe("rule 4: timeouts", () => {
       },
     });
     await rejectsWith(rcon.send("stall", { timeout: 100 }), "TIMEOUT", true);
-    assert.equal(await rcon.send("after"), "after", "the late reply does not leak into the next command");
+    assert.equal(
+      await rcon.send("after"),
+      "after",
+      "the late reply does not leak into the next command",
+    );
     assert.equal(fake.connections, 2);
   });
 
@@ -335,7 +363,10 @@ describe("rule 5: wrong password", () => {
   test("Rcon.connect rejects with AUTH_FAILED", async () => {
     const fake = await FakeServer.start({ password: "right" });
     servers.push(fake);
-    await rejectsWith(Rcon.connect({ host: "127.0.0.1", port: fake.port, password: "wrong" }), "AUTH_FAILED");
+    await rejectsWith(
+      Rcon.connect({ host: "127.0.0.1", port: fake.port, password: "wrong" }),
+      "AUTH_FAILED",
+    );
   });
 });
 
@@ -356,7 +387,9 @@ describe("rule 7 and 8: no crashes, no hangs", () => {
       const rcon = new Rcon({ host: "127.0.0.1", port: ${fake.port}, password: "secret", heartbeat: 1000 });
       console.log(await rcon.send("list"));
     `;
-    const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     const code = await new Promise((resolve, reject) => {
@@ -376,7 +409,9 @@ describe("rule 7 and 8: no crashes, no hangs", () => {
       console.log(rcon.connected);
       await rcon.end();
     `;
-    const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     const code = await new Promise((resolve) => child.on("exit", resolve));
@@ -391,7 +426,9 @@ describe("rule 7 and 8: no crashes, no hangs", () => {
       const rcon = new Rcon({ host: "127.0.0.1", port: ${port}, password: "x", timeout: 600 });
       try { await rcon.send("list"); } catch (error) { console.log(error.code); }
     `;
-    const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     await new Promise((resolve) => child.on("exit", resolve));
@@ -424,7 +461,8 @@ describe("end and dispose", () => {
   test("end() during a connect leaves nothing open", async () => {
     const { fake, rcon } = await setup();
     const events: string[] = [];
-    for (const name of ["connect", "disconnect", "end"] as const) rcon.on(name, () => events.push(name));
+    for (const name of ["connect", "disconnect", "end"] as const)
+      rcon.on(name, () => events.push(name));
     const connecting = rcon.connect();
     await rcon.end();
     await assert.rejects(connecting);
@@ -462,7 +500,9 @@ describe("end and dispose", () => {
       await rcon.end();
       console.log("ended");
     `;
-    const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     // Once the client is connected, make every new login hang, then drop it.
@@ -534,7 +574,10 @@ describe("heartbeat", () => {
   });
 
   test("does not ping while commands keep the connection busy", async () => {
-    const { fake, rcon } = await setup({ handler: async (command) => (await wait(30), command) }, { heartbeat: 50 });
+    const { fake, rcon } = await setup(
+      { handler: async (command) => (await wait(30), command) },
+      { heartbeat: 50 },
+    );
     for (let i = 0; i < 6; i++) await rcon.send(`c${i}`);
     assert.equal(fake.commands.length, 6);
     assert.equal(fake.connections, 1);
@@ -567,7 +610,10 @@ describe("servers that ignore unknown packet types (Factorio)", () => {
 
 describe("Source servers", () => {
   const lines = (count: number, width: number) =>
-    Array.from({ length: count }, (_, i) => `${String(i).padStart(4, "0")} ${"x".repeat(width - 6)}\n`).join("");
+    Array.from(
+      { length: count },
+      (_, i) => `${String(i).padStart(4, "0")} ${"x".repeat(width - 6)}\n`,
+    ).join("");
 
   test("a reply split into short fragments arrives whole", async () => {
     // Lines of 1500 bytes give fragments of 3000 bytes, well below 4096.
@@ -623,7 +669,9 @@ describe("Source servers", () => {
     const write = t.mock.method(Socket.prototype, "write");
     await rcon.send("a");
     await rcon.send("b");
-    const fromClient = write.mock.calls.filter((call) => (call.this as Socket).remotePort === fake.port);
+    const fromClient = write.mock.calls.filter(
+      (call) => (call.this as Socket).remotePort === fake.port,
+    );
     assert.equal(fromClient.length, 2);
     assert.deepEqual(fake.commands, ["a", "b"]);
   });
@@ -710,11 +758,16 @@ describe("sendAll", () => {
   });
 
   test("throws the first failure", async () => {
-    const { rcon } = await setup({ handler: (command, socket) => (command === "bad" && socket.destroy(), command) });
+    const { rcon } = await setup({
+      handler: (command, socket) => (command === "bad" && socket.destroy(), command),
+    });
     const results: string[] = [];
-    await assert.rejects(async () => {
-      for await (const reply of rcon.sendAll(["a", "bad", "c"])) results.push(reply);
-    }, (error: RconError) => error.code === "CONNECTION_LOST");
+    await assert.rejects(
+      async () => {
+        for await (const reply of rcon.sendAll(["a", "bad", "c"])) results.push(reply);
+      },
+      (error: RconError) => error.code === "CONNECTION_LOST",
+    );
     assert.deepEqual(results, ["a"]);
   });
 });

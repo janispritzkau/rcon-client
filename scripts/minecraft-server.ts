@@ -30,7 +30,9 @@ async function paperJar(version: string): Promise<string> {
     const project = await json("https://fill.papermc.io/v3/projects/paper");
     id = Object.values(project.versions as Record<string, string[]>)[0]![0]!;
   }
-  const build = await json(`https://fill.papermc.io/v3/projects/paper/versions/${id}/builds/latest`);
+  const build = await json(
+    `https://fill.papermc.io/v3/projects/paper/versions/${id}/builds/latest`,
+  );
   return build.downloads["server:default"].url;
 }
 
@@ -41,17 +43,20 @@ const jar = await fetch(url);
 if (!jar.ok) throw new Error(`${url}: ${jar.status}`);
 writeFileSync(join(directory, "server.jar"), Buffer.from(await jar.arrayBuffer()));
 writeFileSync(join(directory, "eula.txt"), "eula=true\n");
-writeFileSync(join(directory, "server.properties"), [
-  "enable-rcon=true",
-  "rcon.port=25575",
-  "rcon.password=ci-password",
-  "level-type=minecraft\\:flat",
-  "generate-structures=false",
-  "spawn-protection=0",
-  "online-mode=false",
-  "server-port=25565",
-  "",
-].join("\n"));
+writeFileSync(
+  join(directory, "server.properties"),
+  [
+    "enable-rcon=true",
+    "rcon.port=25575",
+    "rcon.password=ci-password",
+    "level-type=minecraft\\:flat",
+    "generate-structures=false",
+    "spawn-protection=0",
+    "online-mode=false",
+    "server-port=25565",
+    "",
+  ].join("\n"),
+);
 
 const logPath = join(directory, "server.log");
 const log = openSync(logPath, "a");

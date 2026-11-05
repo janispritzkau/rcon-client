@@ -19,7 +19,8 @@ async function announce(message: string, attempt = 1): Promise<void> {
     if (!(error instanceof RconError)) throw error;
     // `sent: false` means it definitely did not run. Only a timeout is worth
     // retrying: AUTH_FAILED, CLOSED and COMMAND_TOO_LONG would fail again.
-    if (!error.sent && error.code === "TIMEOUT" && attempt < 3) return announce(message, attempt + 1);
+    if (!error.sent && error.code === "TIMEOUT" && attempt < 3)
+      return announce(message, attempt + 1);
     console.error(error.sent ? "may or may not have run:" : "did not run:", error.code);
   }
 }

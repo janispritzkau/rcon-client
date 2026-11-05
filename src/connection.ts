@@ -83,7 +83,10 @@ export class Connection {
       const onAbort = () => fail(new RconError("CLOSED", "Client is closed"));
       signal?.addEventListener("abort", onAbort, { once: true });
       const timer = isDelay(options.connectTimeout)
-        ? setTimeout(() => fail(new Error(`Connect timed out after ${options.connectTimeout}ms`)), options.connectTimeout)
+        ? setTimeout(
+            () => fail(new Error(`Connect timed out after ${options.connectTimeout}ms`)),
+            options.connectTimeout,
+          )
         : undefined;
       timer?.unref();
       socket.once("error", fail);
@@ -153,9 +156,13 @@ export class Connection {
       // Waiting longer would not help, and sending anything to nudge the
       // server would make it handle the command a second time, so drop the
       // connection instead.
-      const packet = this.#source && parts.length
-        ? await this.#nextWithin(SOURCE_STALL_MS, "The Source server stopped answering in the middle of a reply")
-        : await this.#next();
+      const packet =
+        this.#source && parts.length
+          ? await this.#nextWithin(
+              SOURCE_STALL_MS,
+              "The Source server stopped answering in the middle of a reply",
+            )
+          : await this.#next();
       if (packet.id === probe) break;
       if (packet.id === -1) throw this.#authLost();
       if (packet.id === id) parts.push(packet.body);
