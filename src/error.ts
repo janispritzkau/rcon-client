@@ -11,6 +11,8 @@ export type RconErrorCode =
   | "TIMEOUT"
   /** The command's `AbortSignal` fired. */
   | "ABORTED"
+  /** The command is an empty string and was never sent. Factorio never answers one. */
+  | "EMPTY_COMMAND"
   /** The command is longer than `maxCommandBytes` and was never sent. */
   | "COMMAND_TOO_LONG"
   /** The server sent something that is not a valid RCON packet. */

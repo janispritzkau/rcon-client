@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
+import { createServer, Socket } from "node:net";
 import { afterEach, describe, test } from "node:test";
 import { Rcon, RconError, type RconOptions } from "../src/index.ts";
 import { FakeServer, wait, type FakeServerOptions } from "./fake-server.ts";
@@ -250,9 +250,18 @@ describe("rule 3: sent commands are never replayed", () => {
 });
 
 describe("rule 4: timeouts", () => {
-  test("the default timeout is 30s", async () => {
-    const { rcon } = await setup({ handler: async () => (await wait(2500), "slow") });
-    assert.equal(await rcon.send("fill"), "slow");
+  test("the default timeout is 30s", async (t) => {
+    const { rcon } = await setup({ handler: () => new Promise<string>(() => {}) });
+    await rcon.connect();
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let outcome = "pending";
+    const settled = rcon.send("fill").then(() => (outcome = "resolved"), (error: RconError) => (outcome = error.code));
+    t.mock.timers.tick(29_999);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(outcome, "pending");
+    t.mock.timers.tick(1);
+    await settled;
+    assert.equal(outcome, "TIMEOUT");
   });
 
   test("an unsent command times out with sent: false", async () => {
@@ -425,6 +434,50 @@ describe("end and dispose", () => {
     assert.deepEqual(events, ["end"]);
   });
 
+  test("end() gives up an attempt that would never finish", async () => {
+    // Accepts connections but never answers the login.
+    const { fake, rcon } = await setup({}, { connectTimeout: 0, timeout: 100 });
+    fake.frozen = true;
+    await rejectsWith(rcon.send("list"), "TIMEOUT", false);
+    const started = performance.now();
+    await rcon.end();
+    assert.ok(performance.now() - started < 500);
+    await wait(20);
+    assert.equal(fake.sockets.size, 0);
+  });
+
+  test("end() during a background reconnect finishes and lets the process exit", async () => {
+    const fake = await FakeServer.start();
+    servers.push(fake);
+    const script = `
+      import { Rcon } from "./src/index.ts";
+      const rcon = new Rcon({ host: "127.0.0.1", port: ${fake.port}, password: "secret", heartbeat: 50, connectTimeout: 0 });
+      // An idle client does not keep the process alive, so hold it until
+      // end(). After that, end() itself must settle without help.
+      const hold = setInterval(() => {}, 1000);
+      await rcon.connect();
+      await new Promise((resolve) => rcon.once("disconnect", resolve));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      clearInterval(hold);
+      await rcon.end();
+      console.log("ended");
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    // Once the client is connected, make every new login hang, then drop it.
+    while (fake.connections === 0) await wait(10);
+    await wait(50);
+    fake.frozen = true;
+    fake.dropAll();
+    const code = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => (child.kill(), reject(new Error("process hung"))), 5000);
+      child.on("exit", (code) => (clearTimeout(timer), resolve(code)));
+    });
+    assert.equal(code, 0);
+    assert.equal(output.trim(), "ended");
+  });
+
   test("end() gives up on a server that is down, even without timeouts", async () => {
     const port = await freePort();
     const rcon = new Rcon({ host: "127.0.0.1", port, password: "x", timeout: 0 });
@@ -457,6 +510,26 @@ describe("heartbeat", () => {
     await wait(600);
     assert.equal(rcon.connected, true);
     assert.deepEqual(events.slice(0, 3), ["connect", "disconnect", "connect"]);
+    assert.equal(await rcon.send("list"), "ran list");
+  });
+
+  test("a server that freezes right after a reconnect is dropped again", async () => {
+    const { fake, rcon } = await setup({}, { heartbeat: 100, connectTimeout: 200 });
+    let connects = 0;
+    let disconnects = 0;
+    rcon.on("connect", () => {
+      // Freeze as soon as the background reconnect has logged in.
+      if (++connects === 2) fake.frozen = true;
+    });
+    rcon.on("disconnect", () => disconnects++);
+    await rcon.connect();
+    fake.dropAll();
+    await held(wait(500));
+    assert.equal(connects, 2);
+    assert.ok(disconnects >= 2, `${disconnects} disconnects`);
+    assert.equal(rcon.connected, false);
+    fake.frozen = false;
+    fake.dropAll();
     assert.equal(await rcon.send("list"), "ran list");
   });
 
@@ -543,6 +616,18 @@ describe("Source servers", () => {
     assert.equal(fake.connections, 2);
   });
 
+  test("each command and its end marker go out in one write", async (t) => {
+    // Loopback would merge two quick writes anyway, so count the writes.
+    const { fake, rcon } = await setup({ source: true });
+    await rcon.connect();
+    const write = t.mock.method(Socket.prototype, "write");
+    await rcon.send("a");
+    await rcon.send("b");
+    const fromClient = write.mock.calls.filter((call) => (call.this as Socket).remotePort === fake.port);
+    assert.equal(fromClient.length, 2);
+    assert.deepEqual(fake.commands, ["a", "b"]);
+  });
+
   test("ping and heartbeat work", async () => {
     const { fake, rcon } = await setup({ source: true }, { heartbeat: 50 });
     assert.ok((await rcon.ping({ timeout: 1000 })) < 1000);
@@ -550,6 +635,15 @@ describe("Source servers", () => {
     assert.equal(rcon.connected, true);
     assert.equal(fake.connections, 1);
     assert.equal(await rcon.send("list"), "ran list");
+  });
+});
+
+describe("empty commands", () => {
+  test("reject before they are sent, because Factorio never answers them", async () => {
+    const { fake, rcon } = await setup({ ignoreUnknown: true, fragment: Infinity });
+    await rejectsWith(rcon.send(""), "EMPTY_COMMAND", false);
+    assert.equal(await rcon.send("/version", { timeout: 1000 }), "ran /version");
+    assert.deepEqual(fake.commands, ["/version"]);
   });
 });
 
@@ -598,6 +692,21 @@ describe("sendAll", () => {
     for await (const _ of rcon.sendAll(slow())) times.push(performance.now() - started);
     assert.ok(times[0]! < 100, `first reply after ${times[0]}ms`);
     assert.ok(times[1]! < 250, `second reply after ${times[1]}ms`);
+  });
+
+  test("breaking out does not wait for a read from the source that never finishes", async () => {
+    const { rcon } = await setup();
+    async function* stuck() {
+      yield "a";
+      await new Promise(() => {});
+      yield "b";
+    }
+    const results: string[] = [];
+    for await (const reply of rcon.sendAll(stuck())) {
+      results.push(reply);
+      break;
+    }
+    assert.deepEqual(results, ["ran a"]);
   });
 
   test("throws the first failure", async () => {

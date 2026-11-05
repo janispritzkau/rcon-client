@@ -11,7 +11,7 @@ export interface FakeServerOptions {
   maxPayload?: number;
   /** Fragment size in UTF-16 units. Minecraft: 4096. Factorio: `Infinity`. */
   fragment?: number;
-  /** Ignore packets of unknown types instead of answering them, like Factorio. */
+  /** Ignore packets of unknown types and empty commands instead of answering them, like Factorio. */
   ignoreUnknown?: boolean;
   /**
    * Behave like a Source dedicated server instead: an empty RESPONSE_VALUE
@@ -162,6 +162,7 @@ export class FakeServer {
         return;
       }
 
+      if (body === "" && this.options.ignoreUnknown) return;
       busy = true;
       this.commands.push(body);
       let output: string;

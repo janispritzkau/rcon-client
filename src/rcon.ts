@@ -122,6 +122,10 @@ export class Rcon extends EventEmitter<RconEvents> {
   #pending = 0;
   #connection: Connection | undefined;
   #opening: Promise<Connection> | undefined;
+  /** Cancels `#opening` when `end()` no longer needs it. */
+  #openAbort: AbortController | undefined;
+  /** Jobs settled since the queues were last cleaned up. */
+  #settledSinceCompact = 0;
   #running = false;
   #wake: (() => void) | undefined;
   #heartbeat: NodeJS.Timeout | undefined;
@@ -177,6 +181,9 @@ export class Rcon extends EventEmitter<RconEvents> {
    * before its reply, it rejects with `sent: true`.
    */
   send(command: string, options?: SendOptions): Promise<string> {
+    if (command === "") {
+      return Promise.reject(new RconError("EMPTY_COMMAND", "Command is empty"));
+    }
     const bytes = Buffer.byteLength(command);
     if (bytes > this.#options.maxCommandBytes) {
       return Promise.reject(new RconError(
@@ -192,6 +199,8 @@ export class Rcon extends EventEmitter<RconEvents> {
    * as soon as it arrives. At most 16 commands are queued ahead, so a large or
    * endless source stays cheap. The first failure is thrown from the loop;
    * commands already queued at that point still run.
+   * If the loop ends early while a read from `commands` is in progress,
+   * `commands` is closed once that read finishes, without waiting for it.
    */
   async *sendAll(
     commands: Iterable<string> | AsyncIterable<string>,
@@ -229,7 +238,15 @@ export class Rcon extends EventEmitter<RconEvents> {
         window.push(promise);
       }
     } finally {
-      if (!exhausted) await iterator.return?.();
+      if (!exhausted) {
+        if (pull) {
+          // An async generator queues return() behind the read in progress,
+          // which may never finish, so close it without waiting.
+          pull.then(() => iterator.return?.(), () => {}).catch(() => {});
+        } else {
+          await iterator.return?.();
+        }
+      }
     }
   }
 
@@ -254,7 +271,13 @@ export class Rcon extends EventEmitter<RconEvents> {
       // Skip the rest of a reconnect backoff: one more attempt, then give up.
       this.#wake?.();
       while (this.#pending) await new Promise<void>((resolve) => this.#drained.push(resolve));
+      // Nothing waits for a connection any more, so give up an attempt that
+      // is still running (for example a background reconnect).
+      this.#openAbort?.abort();
       await this.#opening?.catch(() => {});
+      this.#queue = [];
+      this.#head = 0;
+      this.#urgent = [];
       this.#connection?.destroy();
       this.#connection = undefined;
       this.emit("end");
@@ -328,6 +351,9 @@ export class Rcon extends EventEmitter<RconEvents> {
   #settle(job: Job): boolean {
     if (job.done) return false;
     job.done = true;
+    // Settled jobs stay queued until the worker reaches them, which may not
+    // happen during a long outage, so clean up every so often.
+    if (++this.#settledSinceCompact >= 1024) this.#compact();
     if (job.background) return true;
     this.#release();
     if (--this.#pending === 0) {
@@ -347,6 +373,13 @@ export class Rcon extends EventEmitter<RconEvents> {
       clearInterval(this.#hold);
       this.#hold = undefined;
     }
+  }
+
+  #compact(): void {
+    this.#queue = this.#queue.slice(this.#head).filter((job) => !job.done);
+    this.#head = 0;
+    this.#urgent = this.#urgent.filter((job) => !job.done);
+    this.#settledSinceCompact = 0;
   }
 
   #hasWork(): boolean {
@@ -390,6 +423,14 @@ export class Rcon extends EventEmitter<RconEvents> {
         }
         job.sent = true;
         job.connection = connection;
+        // A heartbeat that rebuilds the connection has no deadline of its own,
+        // because it waits through reconnects. Once it is sent, it gets the
+        // heartbeat interval like every other heartbeat.
+        const { heartbeat } = this.#options;
+        const guard = job.background && isDelay(heartbeat)
+          ? setTimeout(() => connection.destroy(new Error(`No reply to the heartbeat within ${heartbeat}ms`)), heartbeat)
+          : undefined;
+        guard?.unref();
         try {
           const result = job.kind === "exec"
             ? await connection.exec(job.command)
@@ -399,6 +440,8 @@ export class Rcon extends EventEmitter<RconEvents> {
           job.reject(error instanceof RconError && error.code === "PROTOCOL"
             ? new RconError("PROTOCOL", error.message, true)
             : new RconError("CONNECTION_LOST", "Connection lost before the reply", true, error));
+        } finally {
+          clearTimeout(guard);
         }
       }
     } finally {
@@ -432,8 +475,11 @@ export class Rcon extends EventEmitter<RconEvents> {
   }
 
   #open(): Promise<Connection> {
+    if (this.#opening) return this.#opening;
     let connection: Connection | undefined;
-    this.#opening ??= Connection.open(this.#connectionOptions(), (error) => {
+    const abort = new AbortController();
+    this.#openAbort = abort;
+    this.#opening = Connection.open(this.#connectionOptions(), (error) => {
       if (!connection) return;
       if (this.#connection === connection) this.#connection = undefined;
       this.emit("disconnect", error);
@@ -442,7 +488,7 @@ export class Rcon extends EventEmitter<RconEvents> {
         // Rebuild the connection in the background.
         this.#enqueue("ping", "", { timeout: 0 }, true).catch(() => {});
       }
-    }).then((opened) => {
+    }, abort.signal).then((opened) => {
       if (this.#ended && !this.#pending) {
         // end() was called while connecting and nothing needs this connection.
         opened.destroy();
@@ -455,6 +501,7 @@ export class Rcon extends EventEmitter<RconEvents> {
       return opened;
     }).finally(() => {
       this.#opening = undefined;
+      if (this.#openAbort === abort) this.#openAbort = undefined;
     });
     return this.#opening;
   }

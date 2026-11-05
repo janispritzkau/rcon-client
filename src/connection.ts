@@ -62,17 +62,26 @@ export class Connection {
    * Connects and authenticates. Rejects with `AUTH_FAILED` on a wrong
    * password, or with the socket error. The socket is unref'd, so it never
    * keeps the process alive by itself; the client holds the process open
-   * while it has work.
+   * while it has work. Aborting `signal` gives up the attempt and rejects
+   * with `CLOSED`.
    */
-  static open(options: ConnectionOptions, onClose: (error?: Error) => void): Promise<Connection> {
+  static open(
+    options: ConnectionOptions,
+    onClose: (error?: Error) => void,
+    signal?: AbortSignal,
+  ): Promise<Connection> {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) return reject(new RconError("CLOSED", "Client is closed"));
       const socket = connect({ host: options.host, port: options.port });
       socket.unref();
       const fail = (error: Error) => {
         clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
         socket.destroy();
         reject(error);
       };
+      const onAbort = () => fail(new RconError("CLOSED", "Client is closed"));
+      signal?.addEventListener("abort", onAbort, { once: true });
       const timer = isDelay(options.connectTimeout)
         ? setTimeout(() => fail(new Error(`Connect timed out after ${options.connectTimeout}ms`)), options.connectTimeout)
         : undefined;
@@ -86,11 +95,13 @@ export class Connection {
         try {
           await connection.#authenticate();
           clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
           if (!connection.alive) throw connection.#error;
           connection.#onClose = onClose;
           resolve(connection);
         } catch (error) {
           clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
           connection.destroy();
           reject(error);
         }
@@ -112,14 +123,22 @@ export class Connection {
   }
 
   async exec(command: string): Promise<string> {
-    const id = this.#send(PacketType.Command, command);
+    let id: number;
     let probe: number;
     const parts: Buffer[] = [];
     if (this.#source) {
       // Source reads pipelined requests in order, so the probe can follow
-      // right away and costs no extra round trip.
-      probe = this.#sendProbe();
+      // right away and costs no extra round trip. Both go out in one write,
+      // so the server normally reads them together: during the stuck-read
+      // bug (see SOURCE_STALL_MS), a probe arriving later would make it
+      // handle the command a second time.
+      const [commandId, commandPacket] = this.#packet(PacketType.Command, command);
+      const [probeId, probePacket] = this.#probePacket();
+      this.#socket.write(Buffer.concat([commandPacket, probePacket]));
+      id = commandId;
+      probe = probeId;
     } else {
+      id = this.#send(PacketType.Command, command);
       const first = await this.#reply(id);
       const text = first.body.toString("utf8");
       if (text.length < FRAGMENT_UNITS) return text;
@@ -196,13 +215,18 @@ export class Connection {
    * fragmented replies. Minecraft and Factorio answer a repeated password in
    * order and outside the game loop. Unknown packet types do not work there:
    * Factorio ignores them. Source gets its documented end marker instead, an
-   * empty RESPONSE_VALUE that it mirrors, because a repeated password made
-   * it stop answering once another connection from the same address logged in.
+   * empty RESPONSE_VALUE that it mirrors.
    */
-  #sendProbe(): number {
+  #probePacket(): [id: number, packet: Buffer] {
     return this.#source
-      ? this.#send(PacketType.Response, "")
-      : this.#send(PacketType.Auth, this.#password);
+      ? this.#packet(PacketType.Response, "")
+      : this.#packet(PacketType.Auth, this.#password);
+  }
+
+  #sendProbe(): number {
+    const [id, packet] = this.#probePacket();
+    this.#socket.write(packet);
+    return id;
   }
 
   /** The server rejected the repeated password, so it changed since connect. */
@@ -212,13 +236,18 @@ export class Connection {
     return error;
   }
 
-  #send(type: number, body: string): number {
+  #packet(type: number, body: string): [id: number, packet: Buffer] {
     if (this.#error) throw this.#error;
     this.#id = (this.#id % 0x7fff_fffe) + 1;
+    return [this.#id, encodePacket(this.#id, type, body)];
+  }
+
+  #send(type: number, body: string): number {
+    const [id, packet] = this.#packet(type, body);
     // One write call per packet: Minecraft closes the connection if a request
     // arrives split across reads.
-    this.#socket.write(encodePacket(this.#id, type, body));
-    return this.#id;
+    this.#socket.write(packet);
+    return id;
   }
 
   #next(): Promise<Packet> {

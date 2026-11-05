@@ -25,6 +25,8 @@ Most code keeps working after a few small changes. The class, `Rcon.connect`, `s
 | `end()` throws if not connected | `end()` always works, waits for queued commands, and can be called more than once |
 | Errors are plain `Error` | `RconError` with `code` and `sent` |
 | Long replies cut at 4096 characters | Arrive whole |
+| `send("")` was sent to the server | Rejects with `EMPTY_COMMAND` (Factorio never answers an empty command) |
+| Any command length | Longer than `maxCommandBytes` (default 1446, 1014 on Source servers) rejects with `COMMAND_TOO_LONG` |
 
 ## Example
 
