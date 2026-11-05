@@ -4,15 +4,17 @@
  *
  *   RCON_SERVER=source RCON_PORT=27015 RCON_PASSWORD=... npm run test:integration
  *
- * Sends one wrong password. Source bans an address after
- * `sv_rcon_maxfailures` (default 10) of them.
+ * Sends one wrong password, as the last test: after it, the server stops
+ * answering other connections from the same address. Source bans an address
+ * after `sv_rcon_maxfailures` (default 10) wrong passwords.
  */
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { Rcon, RconError } from "../../src/index.ts";
 
 const { RCON_HOST = "127.0.0.1", RCON_PORT = "27015", RCON_PASSWORD = "", RCON_SERVER } = process.env;
-const options = { host: RCON_HOST, port: Number(RCON_PORT), password: RCON_PASSWORD };
+// Short timeouts so a hang fails in seconds instead of after the 30s default.
+const options = { host: RCON_HOST, port: Number(RCON_PORT), password: RCON_PASSWORD, timeout: 10_000 };
 
 describe(`Source server at ${RCON_HOST}:${RCON_PORT}`, { skip: RCON_SERVER !== "source" && "RCON_SERVER is not source" }, () => {
   let rcon: Rcon;
@@ -40,13 +42,6 @@ describe(`Source server at ${RCON_HOST}:${RCON_PORT}`, { skip: RCON_SERVER !== "
     await client.end();
   });
 
-  test("a wrong password fails with AUTH_FAILED", async () => {
-    await assert.rejects(
-      Rcon.connect({ ...options, password: `${RCON_PASSWORD}-wrong` }),
-      (error: RconError) => error.code === "AUTH_FAILED",
-    );
-  });
-
   test("cvarlist arrives whole although its fragments are short", async () => {
     const reply = await rcon.send("cvarlist");
     const total = reply.match(/(\d+) total convars\/concommands/);
@@ -72,5 +67,18 @@ describe(`Source server at ${RCON_HOST}:${RCON_PORT}`, { skip: RCON_SERVER !== "
       Array.from({ length: 100 }, (_, i) => rcon.send(`echo marker${i}`)),
     );
     replies.forEach((reply, i) => assert.match(reply, new RegExp(`^marker${i}\\b`)));
+  });
+
+  // Keep this last.
+  test("a wrong password fails with AUTH_FAILED, and the client recovers from the silence that follows", async (t) => {
+    await assert.rejects(
+      Rcon.connect({ ...options, password: `${RCON_PASSWORD}-wrong` }),
+      (error: RconError) => error.code === "AUTH_FAILED",
+    );
+    // Source stops answering the existing connection. The command times out
+    // with sent: true, the socket is dropped, and the next command reconnects.
+    const first = await rcon.send("version", { timeout: 3000 }).then(() => "answered", (error: RconError) => error.code);
+    t.diagnostic(`command on the existing connection after a wrong password: ${first}`);
+    assert.match(await rcon.send("version"), /Server version/);
   });
 });

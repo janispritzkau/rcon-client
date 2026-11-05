@@ -10,7 +10,8 @@ import { after, before, describe, test } from "node:test";
 import { Rcon, RconError } from "../../src/index.ts";
 
 const { RCON_HOST = "127.0.0.1", RCON_PORT = "27015", RCON_PASSWORD = "", RCON_SERVER } = process.env;
-const options = { host: RCON_HOST, port: Number(RCON_PORT), password: RCON_PASSWORD };
+// Short timeouts so a hang fails in seconds instead of after the 30s default.
+const options = { host: RCON_HOST, port: Number(RCON_PORT), password: RCON_PASSWORD, timeout: 10_000 };
 
 describe(`Factorio server at ${RCON_HOST}:${RCON_PORT}`, { skip: RCON_SERVER !== "factorio" && "RCON_SERVER is not factorio" }, () => {
   let rcon: Rcon;
