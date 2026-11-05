@@ -23,4 +23,6 @@ jobs:
       - name: Tag matches package version
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - name: Publish
-        run: npm publish --provenance --access public --tag "$(node -p 'require("./package.json").version.includes("-") ? "next" : "latest"')"
+        run: |
+          tag=$(node -p 'require("./package.json").version.includes("-") ? "next" : "latest"')
+          npm publish --provenance --access public --tag "$tag"
