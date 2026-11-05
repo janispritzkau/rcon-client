@@ -137,6 +137,8 @@ Every rejection is an `RconError` with `code` and `sent`. `sent: true` means the
 
 **Source servers ban addresses.** By default, Source allows commands up to 1014 bytes (`sv_rcon_maxpacketsize 1024`, minus the header) and bans the sender's address after oversized packets (`sv_rcon_maxpacketbans`). The client detects Source servers when it connects and then rejects longer commands with `COMMAND_TOO_LONG`, unless you set `maxCommandBytes` yourself. Wrong passwords count toward a ban too (`sv_rcon_maxfailures`, default 10). The client does not retry `AUTH_FAILED`, but a script that restarts in a loop with a wrong password can still get banned. With `sv_rcon_banpenalty 0`, the default, the ban is permanent until the server restarts, or longer if the ban list is saved.
 
+**Source servers get stuck when another connection closes.** If a request reaches a Source server in the same frame as another RCON connection closes, the server answers it but then stops reading that connection. When more data arrives, it handles the stuck command again: in tests it sent the whole reply a second time, so the command most likely ran twice. The client never sends more data to such a connection: if a reply has started and nothing follows for 2 seconds, it drops the connection, rejects the command with `CONNECTION_LOST` and `sent: true`, and reconnects for the next one. Programs that open and close connections often, such as status pages, make this more likely.
+
 **Acks during shutdown.** Minecraft keeps answering commands for a moment after `stop`. A reply at that point does not mean the change was saved: in one test, about 1,600 of 4,000 acknowledged commands were missing after the restart.
 
 **Parallel connections on vanilla Minecraft.** Vanilla servers collect command output in one buffer that all RCON connections share. If two connections run commands at the same moment, they can receive each other's output, an empty reply, or both joined together. The commands still run, but replies can be wrong. In a stress test with two connections, half of the replies were wrong. This also happens when two separate programs connect to the same server. One `Rcon` instance uses one connection, so it is not affected alone. Paper does not have this problem.
@@ -154,8 +156,8 @@ Only setups that were actually tested are listed here.
 | Minecraft Java 1.16.5, 1.20.1, 26.3 (vanilla) | Tested in CI, including fragmented replies |
 | Paper 1.21.11, 26.3 | Tested in CI |
 | Factorio 2.1 | Tested in CI, including 1 MB replies |
-| Counter-Strike: Source | Tested in CI, including fragmented replies |
-| Half-Life 2: Deathmatch | Tested once, same results as CS:S |
+| Half-Life 2: Deathmatch | Tested in CI, including fragmented replies |
+| Counter-Strike: Source | Tested, same results as HL2DM |
 | CS2, L4D2, TF2, Palworld, Rust, ARK, others | Not tested. Reports are welcome. |
 
 Runtimes: Node.js 22, 24 and 26 (both `import` and `require()`), Deno 2 and Bun 1.

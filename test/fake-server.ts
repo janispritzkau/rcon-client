@@ -68,6 +68,12 @@ export class FakeServer {
   frozen = false;
   /** Source mode: set once a client sent an oversized packet. Every later connection is dropped. */
   banned = false;
+  /**
+   * Source mode: the next command is answered, then the connection stops
+   * reading, like Source when another connection closes in the same frame.
+   * When more data arrives, the stuck command runs again, as on a real server.
+   */
+  stallNext = false;
   #server: Server | undefined;
   port = 0;
 
@@ -181,6 +187,7 @@ export class FakeServer {
     const queue: Packet[] = [];
     let authed = false;
     let working = false;
+    let stalled: Packet[] | undefined;
 
     const reply = (id: number, type: number, body: string | Buffer) => {
       if (!socket.destroyed) socket.write(encodePacket(id, type, body));
@@ -214,6 +221,12 @@ export class FakeServer {
           this.commands.push(body);
           const output = await this.options.handler(body, socket);
           for (const fragment of sourceFragments(output)) reply(id, 0, fragment);
+          if (this.stallNext) {
+            this.stallNext = false;
+            // Keep the rest unread and replay the command with it later.
+            stalled = [{ id, type, body: payload }, ...queue.splice(0)];
+            break;
+          }
         }
       }
       working = false;
@@ -222,6 +235,10 @@ export class FakeServer {
     socket.on("data", (chunk: Buffer) => {
       if (this.frozen) return;
       reader.push(chunk);
+      if (stalled) {
+        queue.push(...stalled);
+        stalled = undefined;
+      }
       for (let packet = reader.read(); packet; packet = reader.read()) queue.push(packet);
       void work();
     });

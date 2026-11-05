@@ -530,6 +530,19 @@ describe("Source servers", () => {
     assert.equal((await rcon.send("x".repeat(2000))).length, 2004);
   });
 
+  test("a stalled server fails the command quickly and never makes it run twice", async () => {
+    const { fake, rcon } = await setup({ source: true });
+    await rcon.connect();
+    fake.stallNext = true;
+    const started = performance.now();
+    await rejectsWith(rcon.send("give"), "CONNECTION_LOST", true);
+    const elapsed = performance.now() - started;
+    assert.ok(elapsed > 1500 && elapsed < 3000, `${elapsed}ms`);
+    assert.equal(await rcon.send("list"), "ran list");
+    assert.deepEqual(fake.commands, ["give", "list"]);
+    assert.equal(fake.connections, 2);
+  });
+
   test("ping and heartbeat work", async () => {
     const { fake, rcon } = await setup({ source: true }, { heartbeat: 50 });
     assert.ok((await rcon.ping({ timeout: 1000 })) < 1000);

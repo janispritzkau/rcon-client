@@ -85,7 +85,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: CS:S, app: 232330, game: cstrike, map: de_dust2 }
+          # The smallest Source game server, 0.9 GB against 2.3 GB for CS:S.
+          - { name: HL2DM, app: 232370, game: hl2mp, map: dm_lockdown }
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -98,8 +99,25 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update -q
           sudo apt-get install -yq lib32gcc-s1 lib32stdc++6 > /dev/null
+      - name: Week number for the server cache
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+      # SteamCMD then only fetches updates. A new key each week picks up
+      # server updates even when SteamCMD has nothing to fetch.
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: ${{ runner.temp }}/srcds/server
+          key: srcds-${{ matrix.app }}-${{ steps.week.outputs.week }}
+          restore-keys: srcds-${{ matrix.app }}-
       - name: Start server
         run: scripts/source-server.sh ${{ matrix.app }} ${{ matrix.game }} ${{ matrix.map }} "$RUNNER_TEMP/srcds"
+      # Saved right away, so a failing test does not throw the download away.
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/srcds/server
+          key: srcds-${{ matrix.app }}-${{ steps.week.outputs.week }}
       - run: npm run test:integration
         env:
           RCON_SERVER: source

@@ -4,7 +4,7 @@
 # connections. Needs the 32-bit libraries: lib32gcc-s1 lib32stdc++6.
 #
 #   scripts/source-server.sh <app id> <game> <map> <directory>
-#   scripts/source-server.sh 232330 cstrike de_dust2 srcds
+#   scripts/source-server.sh 232370 hl2mp dm_lockdown srcds
 set -euo pipefail
 app=$1 game=$2 map=$3 dir=$(realpath -m "${4:-srcds}")
 mkdir -p "$dir/steamcmd"

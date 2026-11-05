@@ -39,6 +39,9 @@ describe(`Source server at ${RCON_HOST}:${RCON_PORT}`, { skip: RCON_SERVER !== "
     assert.equal(drops, 0);
     assert.equal(client.connected, true);
     await client.end();
+    // Let the server see the close before the next test sends anything (see
+    // the race test below).
+    await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
   test("cvarlist arrives whole although its fragments are short", async () => {
@@ -73,7 +76,22 @@ describe(`Source server at ${RCON_HOST}:${RCON_PORT}`, { skip: RCON_SERVER !== "
       Rcon.connect({ ...options, password: `${RCON_PASSWORD}-wrong` }),
       (error: RconError) => error.code === "AUTH_FAILED",
     );
+    await new Promise((resolve) => setTimeout(resolve, 100));
     assert.match(await rcon.send("version", { timeout: 3000 }), /Server version/);
     assert.ok((await rcon.send("cvarlist", { timeout: 3000 })).length > 50_000);
+  });
+
+  test("a command racing another connection's close fails fast", async () => {
+    // Source stops reading a connection when another one closes in the same
+    // frame, and handles the stuck command again when more data arrives.
+    const other = await Rcon.connect(options);
+    await rcon.send("version");
+    const closed = other.end();
+    const started = performance.now();
+    const outcome = await rcon.send("echo race").then(() => "answered", (error: RconError) => error.code);
+    await closed;
+    assert.ok(["answered", "CONNECTION_LOST"].includes(outcome), outcome);
+    assert.ok(performance.now() - started < 4000, "no long hang");
+    assert.match(await rcon.send("version"), /Server version/);
   });
 });

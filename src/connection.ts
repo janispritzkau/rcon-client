@@ -11,6 +11,15 @@ import { encodePacket, PacketReader, PacketType, type Packet } from "./packet.ts
  */
 const FRAGMENT_UNITS = 4096;
 
+/**
+ * Source writes every fragment of a reply in the same server frame. If the
+ * reply has started but nothing follows for this long, the server is stuck:
+ * Source stops reading a connection when another RCON connection closes in
+ * the same frame, and handles the stuck command again (sending its reply a
+ * second time) once more data arrives.
+ */
+const SOURCE_STALL_MS = 2000;
+
 export interface ConnectionOptions {
   host: string;
   port: number;
@@ -122,7 +131,12 @@ export class Connection {
       parts.push(first.body);
     }
     for (;;) {
-      const packet = await this.#next();
+      // Waiting longer would not help, and sending anything to nudge the
+      // server would make it handle the command a second time, so drop the
+      // connection instead.
+      const packet = this.#source && parts.length
+        ? await this.#nextWithin(SOURCE_STALL_MS, "The Source server stopped answering in the middle of a reply")
+        : await this.#next();
       if (packet.id === probe) break;
       if (packet.id === -1) throw this.#authLost();
       if (packet.id === id) parts.push(packet.body);
@@ -213,6 +227,17 @@ export class Connection {
     this.#waiter = { resolve, reject };
     this.#drain();
     return promise;
+  }
+
+  /** Like `#next`, but destroys the connection if nothing arrives in time. */
+  async #nextWithin(ms: number, message: string): Promise<Packet> {
+    const timer = setTimeout(() => this.destroy(new Error(message)), ms);
+    timer.unref();
+    try {
+      return await this.#next();
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   #receive(chunk: Buffer): void {
