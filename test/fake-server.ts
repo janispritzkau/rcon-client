@@ -69,9 +69,9 @@ export class FakeServer {
   /** Source mode: set once a client sent an oversized packet. Every later connection is dropped. */
   banned = false;
   /**
-   * Source mode: the next command is answered, then the connection stops
-   * reading, like Source when another connection closes in the same frame.
-   * When more data arrives, the stuck command runs again, as on a real server.
+   * Source mode: the next command is answered and the rest of the read is left
+   * unprocessed, like Source right after another connection closed. When more
+   * data arrives, the stuck command runs again, as on a real server.
    */
   stallNext = false;
   #server: Server | undefined;

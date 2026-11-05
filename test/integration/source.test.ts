@@ -95,8 +95,9 @@ describe(
     });
 
     test("a command racing another connection's close fails fast", async () => {
-      // Source stops reading a connection when another one closes in the same
-      // frame, and handles the stuck command again when more data arrives.
+      // Right after another connection closed, Source answers the first request
+      // in a read and leaves the rest unprocessed until more data arrives
+      // (ValveSoftware/Source-1-Games#8451).
       const other = await Rcon.connect(options);
       await rcon.send("version");
       const closed = other.end();

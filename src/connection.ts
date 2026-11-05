@@ -14,9 +14,9 @@ const FRAGMENT_UNITS = 4096;
 /**
  * Source writes every fragment of a reply in the same server frame. If the
  * reply has started but nothing follows for this long, the server is stuck:
- * Source stops reading a connection when another RCON connection closes in
- * the same frame, and handles the stuck command again (sending its reply a
- * second time) once more data arrives.
+ * right after another RCON connection closed, Source answers the first request
+ * in a read, leaves the rest of the read unprocessed, and runs the whole read
+ * again once more data arrives (ValveSoftware/Source-1-Games#8451).
  */
 const SOURCE_STALL_MS = 2000;
 
