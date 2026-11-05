@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # publint and attw check the packed tarball. attw's esm-only profile
+      # skips require(), so the step below still runs it for real.
+      - run: npm run check:package
+      - name: Package loads through import and require
+        run: |
+          node --input-type=module -e "import { Rcon } from './dist/index.js'; if (typeof Rcon !== 'function') process.exit(1)"
+          node -e "const { Rcon } = require('./dist/index.js'); if (typeof Rcon !== 'function') process.exit(1)"
+
+  minecraft:
+    name: Minecraft ${{ matrix.server }} ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { server: vanilla, version: latest, java: 25 }
+          - { server: vanilla, version: 1.20.1, java: 17 }
+          - { server: vanilla, version: 1.16.5, java: 11 }
+          - { server: paper, version: latest, java: 25 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - run: npm ci
+      - name: Start server
+        run: node scripts/minecraft-server.ts ${{ matrix.server }} ${{ matrix.version }} "$RUNNER_TEMP/server"
+      - run: npm run test:integration
+        env:
+          RCON_PORT: 25575
+          RCON_PASSWORD: ci-password
+
+  factorio:
+    name: Factorio stable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Start server
+        run: scripts/factorio-server.sh "$RUNNER_TEMP/factorio"
+      - run: npm run test:integration
+        env:
+          RCON_SERVER: factorio
+          RCON_PORT: 27015
+          RCON_PASSWORD: ci-password
+
+  source:
+    name: Source ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The smallest Source game server, 0.9 GB against 2.3 GB for CS:S.
+          - { name: HL2DM, app: 232370, game: hl2mp, map: dm_lockdown }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install 32-bit libraries
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo apt-get install -yq lib32gcc-s1 lib32stdc++6 > /dev/null
+      - name: Week number for the server cache
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+      # SteamCMD then only fetches updates. A new key each week picks up
+      # server updates even when SteamCMD has nothing to fetch.
+      - uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: ${{ runner.temp }}/srcds/server
+          key: srcds-${{ matrix.app }}-${{ steps.week.outputs.week }}
+          restore-keys: srcds-${{ matrix.app }}-
+      - name: Start server
+        run: scripts/source-server.sh ${{ matrix.app }} ${{ matrix.game }} ${{ matrix.map }} "$RUNNER_TEMP/srcds"
+      # Saved right away, so a failing test does not throw the download away.
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/srcds/server
+          key: srcds-${{ matrix.app }}-${{ steps.week.outputs.week }}
+      - run: npm run test:integration
+        env:
+          RCON_SERVER: source
+          RCON_PORT: 27015
+          RCON_PASSWORD: ci-password

@@ -1,12 +1,18 @@
 {
-    "compilerOptions": {
-        "target": "esnext",
-        "module": "commonjs",
-        "outDir": "lib",
-        "strict": true,
-        "declaration": true
-    },
-    "include": [
-        "./src"
-    ]
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2024", "esnext.disposable"],
+    "module": "nodenext",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "test", "examples"]
 }

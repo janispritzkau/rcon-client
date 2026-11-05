@@ -1,0 +1,52 @@
+name: Release
+
+# A v* tag stages the version on npm through trusted publishing. It goes live
+# only after a maintainer runs `npm stage approve rcon-client@<version>` (with
+# 2FA). The trusted publisher on npm is configured to allow staging only.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: write # GitHub Release
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      # Pinned to commits: this job can publish, so a moved tag must not change it.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Tag matches package version
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Staged publishing needs npm 11.15.0 or later.
+      - run: npm install --global npm@11.21.2
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:package
+      - name: Stage on npm
+        run: |
+          tag=$(node -p 'require("./package.json").version.includes("-") ? "next" : "latest"')
+          npm stage publish --provenance --access public --tag "$tag"
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=(--verify-tag --generate-notes)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" "${flags[@]}" \
+            --notes "Staged on npm. It becomes installable once a maintainer approves it with \`npm stage approve rcon-client@${GITHUB_REF_NAME#v}\`."
