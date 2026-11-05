@@ -9,9 +9,13 @@ set -euo pipefail
 app=$1 game=$2 map=$3 dir=$(realpath -m "${4:-srcds}")
 mkdir -p "$dir/steamcmd"
 curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xz -C "$dir/steamcmd"
+# Re-hashing a cached install with "validate" is slower than a fresh download,
+# so validate only fresh installs. app_update still fetches updates.
+validate=validate
+[ -x "$dir/server/srcds_run" ] && validate=
 # SteamCMD fails now and then with "Missing configuration"; a retry fixes it.
 for _ in 1 2 3; do
-  "$dir/steamcmd/steamcmd.sh" +force_install_dir "$dir/server" +login anonymous +app_update "$app" validate +quit | tail -2 || true
+  "$dir/steamcmd/steamcmd.sh" +force_install_dir "$dir/server" +login anonymous +app_update "$app" $validate +quit | tail -2 || true
   [ -x "$dir/server/srcds_run" ] && break
 done
 [ -x "$dir/server/srcds_run" ] || { echo "SteamCMD did not install app $app"; exit 1; }
