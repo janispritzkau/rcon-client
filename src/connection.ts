@@ -178,13 +178,17 @@ export class Connection {
   }
 
   /**
-   * Sends the password again. Every tested server answers this in order and
-   * without touching its main thread, so the reply serves as a ping and as
-   * the end marker for fragmented replies. Unknown packet types do not work
-   * for this: Factorio ignores them.
+   * Sends a request whose reply serves as a ping and as the end marker for
+   * fragmented replies. Minecraft and Factorio answer a repeated password in
+   * order and outside the game loop. Unknown packet types do not work there:
+   * Factorio ignores them. Source gets its documented end marker instead, an
+   * empty RESPONSE_VALUE that it mirrors, because a repeated password made
+   * it stop answering once another connection from the same address logged in.
    */
   #sendProbe(): number {
-    return this.#send(PacketType.Auth, this.#password);
+    return this.#source
+      ? this.#send(PacketType.Response, "")
+      : this.#send(PacketType.Auth, this.#password);
   }
 
   /** The server rejected the repeated password, so it changed since connect. */

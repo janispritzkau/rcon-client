@@ -45,6 +45,9 @@ describe("Source-style servers", () => {
             socket.write(encodePacket(packet.body.toString() === password ? packet.id : -1, 2, ""));
           } else if (packet.type === 2) {
             socket.write(encodePacket(packet.id, 0, `ok ${packet.body}`));
+          } else if (packet.type === 0) {
+            socket.write(encodePacket(packet.id, 0, ""));
+            socket.write(encodePacket(packet.id, 0, Buffer.from([0, 1, 0, 0])));
           }
         }
       });

@@ -4,9 +4,8 @@
  *
  *   RCON_SERVER=source RCON_PORT=27015 RCON_PASSWORD=... npm run test:integration
  *
- * Sends one wrong password, as the last test: after it, the server stops
- * answering other connections from the same address. Source bans an address
- * after `sv_rcon_maxfailures` (default 10) wrong passwords.
+ * Sends one wrong password. Source bans an address after
+ * `sv_rcon_maxfailures` (default 10) of them.
  */
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
@@ -69,16 +68,12 @@ describe(`Source server at ${RCON_HOST}:${RCON_PORT}`, { skip: RCON_SERVER !== "
     replies.forEach((reply, i) => assert.match(reply, new RegExp(`^marker${i}\\b`)));
   });
 
-  // Keep this last.
-  test("a wrong password fails with AUTH_FAILED, and the client recovers from the silence that follows", async (t) => {
+  test("a wrong password elsewhere does not disturb this connection", async () => {
     await assert.rejects(
       Rcon.connect({ ...options, password: `${RCON_PASSWORD}-wrong` }),
       (error: RconError) => error.code === "AUTH_FAILED",
     );
-    // Source stops answering the existing connection. The command times out
-    // with sent: true, the socket is dropped, and the next command reconnects.
-    const first = await rcon.send("version", { timeout: 3000 }).then(() => "answered", (error: RconError) => error.code);
-    t.diagnostic(`command on the existing connection after a wrong password: ${first}`);
-    assert.match(await rcon.send("version"), /Server version/);
+    assert.match(await rcon.send("version", { timeout: 3000 }), /Server version/);
+    assert.ok((await rcon.send("cvarlist", { timeout: 3000 })).length > 50_000);
   });
 });
