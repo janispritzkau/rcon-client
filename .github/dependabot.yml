@@ -7,6 +7,11 @@ updates:
     groups:
       dev-dependencies:
         patterns: ["*"]
+    ignore:
+      # Matches the oldest supported Node (engines: >=22.12), so the types
+      # never offer an API that Node 22 lacks.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
