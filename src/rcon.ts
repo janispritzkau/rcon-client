@@ -186,10 +186,12 @@ export class Rcon extends EventEmitter<RconEvents> {
     }
     const bytes = Buffer.byteLength(command);
     if (bytes > this.#options.maxCommandBytes) {
-      return Promise.reject(new RconError(
-        "COMMAND_TOO_LONG",
-        `Command is ${bytes} bytes, the limit is ${this.#options.maxCommandBytes}`,
-      ));
+      return Promise.reject(
+        new RconError(
+          "COMMAND_TOO_LONG",
+          `Command is ${bytes} bytes, the limit is ${this.#options.maxCommandBytes}`,
+        ),
+      );
     }
     return this.#enqueue("exec", command, options) as Promise<string>;
   }
@@ -206,9 +208,10 @@ export class Rcon extends EventEmitter<RconEvents> {
     commands: Iterable<string> | AsyncIterable<string>,
     options?: SendOptions,
   ): AsyncGenerator<string, void, undefined> {
-    const iterator: Iterator<string> | AsyncIterator<string> = Symbol.asyncIterator in commands
-      ? commands[Symbol.asyncIterator]()
-      : commands[Symbol.iterator]();
+    const iterator: Iterator<string> | AsyncIterator<string> =
+      Symbol.asyncIterator in commands
+        ? commands[Symbol.asyncIterator]()
+        : commands[Symbol.iterator]();
     const window: Promise<string>[] = [];
     let pull: Promise<IteratorResult<string>> | undefined;
     let exhausted = false;
@@ -217,9 +220,20 @@ export class Rcon extends EventEmitter<RconEvents> {
         if (!exhausted && !pull && window.length < 16) pull = Promise.resolve(iterator.next());
         const head = window[0];
         // Wait for whichever comes first: the oldest reply or the next command.
-        const next = head && pull
-          ? await Promise.race([head.then(() => "reply", () => "reply"), pull.then(() => "source")])
-          : head ? "reply" : pull ? "source" : "done";
+        const next =
+          head && pull
+            ? await Promise.race([
+                head.then(
+                  () => "reply",
+                  () => "reply",
+                ),
+                pull.then(() => "source"),
+              ])
+            : head
+              ? "reply"
+              : pull
+                ? "source"
+                : "done";
         if (next === "done") return;
         if (next === "reply") {
           yield await window.shift()!;
@@ -241,7 +255,12 @@ export class Rcon extends EventEmitter<RconEvents> {
         if (pull) {
           // An async generator queues return() behind the read in progress,
           // which may never finish, so close it without waiting.
-          pull.then(() => iterator.return?.(), () => {}).catch(() => {});
+          pull
+            .then(
+              () => iterator.return?.(),
+              () => {},
+            )
+            .catch(() => {});
         } else {
           await iterator.return?.();
         }
@@ -289,7 +308,12 @@ export class Rcon extends EventEmitter<RconEvents> {
     return this.end();
   }
 
-  #enqueue(kind: Kind, command: string, options: SendOptions = {}, background = false): Promise<string | number> {
+  #enqueue(
+    kind: Kind,
+    command: string,
+    options: SendOptions = {},
+    background = false,
+  ): Promise<string | number> {
     if (this.#ended) return Promise.reject(new RconError("CLOSED", "Client is closed"));
     const { signal, timeout = this.#options.timeout } = options;
     const { promise, resolve, reject } = Promise.withResolvers<string | number>();
@@ -300,7 +324,8 @@ export class Rcon extends EventEmitter<RconEvents> {
     }
 
     let timer: NodeJS.Timeout | undefined;
-    const onAbort = () => this.#fail(job, new RconError("ABORTED", "Aborted", job.sent, signal!.reason));
+    const onAbort = () =>
+      this.#fail(job, new RconError("ABORTED", "Aborted", job.sent, signal!.reason));
     const cleanup = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
@@ -417,10 +442,12 @@ export class Rcon extends EventEmitter<RconEvents> {
         if (job.kind === "exec" && this.#autoLimit && connection.source) {
           const bytes = Buffer.byteLength(job.command);
           if (bytes > SOURCE_MAX_COMMAND_BYTES) {
-            job.reject(new RconError(
-              "COMMAND_TOO_LONG",
-              `Command is ${bytes} bytes, the limit on Source servers is ${SOURCE_MAX_COMMAND_BYTES}`,
-            ));
+            job.reject(
+              new RconError(
+                "COMMAND_TOO_LONG",
+                `Command is ${bytes} bytes, the limit on Source servers is ${SOURCE_MAX_COMMAND_BYTES}`,
+              ),
+            );
             continue;
           }
         }
@@ -430,19 +457,25 @@ export class Rcon extends EventEmitter<RconEvents> {
         // because it waits through reconnects. Once it is sent, it gets the
         // heartbeat interval like every other heartbeat.
         const { heartbeat } = this.#options;
-        const guard = job.background && isDelay(heartbeat)
-          ? setTimeout(() => connection.destroy(new Error(`No reply to the heartbeat within ${heartbeat}ms`)), heartbeat)
-          : undefined;
+        const guard =
+          job.background && isDelay(heartbeat)
+            ? setTimeout(
+                () =>
+                  connection.destroy(new Error(`No reply to the heartbeat within ${heartbeat}ms`)),
+                heartbeat,
+              )
+            : undefined;
         guard?.unref();
         try {
-          const result = job.kind === "exec"
-            ? await connection.exec(job.command)
-            : await connection.ping();
+          const result =
+            job.kind === "exec" ? await connection.exec(job.command) : await connection.ping();
           job.resolve(result);
         } catch (error) {
-          job.reject(error instanceof RconError && error.code === "PROTOCOL"
-            ? new RconError("PROTOCOL", error.message, true)
-            : new RconError("CONNECTION_LOST", "Connection lost before the reply", true, error));
+          job.reject(
+            error instanceof RconError && error.code === "PROTOCOL"
+              ? new RconError("PROTOCOL", error.message, true)
+              : new RconError("CONNECTION_LOST", "Connection lost before the reply", true, error),
+          );
         } finally {
           clearTimeout(guard);
         }
@@ -482,30 +515,36 @@ export class Rcon extends EventEmitter<RconEvents> {
     let connection: Connection | undefined;
     const abort = new AbortController();
     this.#openAbort = abort;
-    this.#opening = Connection.open(this.#connectionOptions(), (error) => {
-      if (!connection) return;
-      if (this.#connection === connection) this.#connection = undefined;
-      this.emit("disconnect", error);
-      this.#stopHeartbeat();
-      if (isDelay(this.#options.heartbeat) && !this.#ended) {
-        // Rebuild the connection in the background.
-        this.#enqueue("ping", "", { timeout: 0 }, true).catch(() => {});
-      }
-    }, abort.signal).then((opened) => {
-      if (this.#ended && !this.#pending) {
-        // end() was called while connecting and nothing needs this connection.
-        opened.destroy();
-        throw new RconError("CLOSED", "Client is closed");
-      }
-      connection = opened;
-      this.#connection = opened;
-      this.emit("connect");
-      this.#scheduleHeartbeat();
-      return opened;
-    }).finally(() => {
-      this.#opening = undefined;
-      if (this.#openAbort === abort) this.#openAbort = undefined;
-    });
+    this.#opening = Connection.open(
+      this.#connectionOptions(),
+      (error) => {
+        if (!connection) return;
+        if (this.#connection === connection) this.#connection = undefined;
+        this.emit("disconnect", error);
+        this.#stopHeartbeat();
+        if (isDelay(this.#options.heartbeat) && !this.#ended) {
+          // Rebuild the connection in the background.
+          this.#enqueue("ping", "", { timeout: 0 }, true).catch(() => {});
+        }
+      },
+      abort.signal,
+    )
+      .then((opened) => {
+        if (this.#ended && !this.#pending) {
+          // end() was called while connecting and nothing needs this connection.
+          opened.destroy();
+          throw new RconError("CLOSED", "Client is closed");
+        }
+        connection = opened;
+        this.#connection = opened;
+        this.emit("connect");
+        this.#scheduleHeartbeat();
+        return opened;
+      })
+      .finally(() => {
+        this.#opening = undefined;
+        if (this.#openAbort === abort) this.#openAbort = undefined;
+      });
     return this.#opening;
   }
 
@@ -539,7 +578,8 @@ export class Rcon extends EventEmitter<RconEvents> {
 
   #scheduleHeartbeat(): void {
     const { heartbeat } = this.#options;
-    if (!isDelay(heartbeat) || this.#ended || this.#running || !this.connected || this.#heartbeat) return;
+    if (!isDelay(heartbeat) || this.#ended || this.#running || !this.connected || this.#heartbeat)
+      return;
     this.#heartbeat = setTimeout(() => {
       this.#heartbeat = undefined;
       this.#enqueue("ping", "", { timeout: heartbeat }, true).catch(() => {});
@@ -555,5 +595,10 @@ export class Rcon extends EventEmitter<RconEvents> {
 
 function toRconError(error: unknown): RconError {
   if (error instanceof RconError) return error;
-  return new RconError("CONNECTION_FAILED", `Could not connect: ${(error as Error).message}`, false, error);
+  return new RconError(
+    "CONNECTION_FAILED",
+    `Could not connect: ${(error as Error).message}`,
+    false,
+    error,
+  );
 }

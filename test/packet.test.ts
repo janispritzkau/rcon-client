@@ -13,14 +13,25 @@ describe("PacketReader", () => {
   });
 
   test("reassembles packets split at every byte and joined together", () => {
-    const stream = Buffer.concat([encodePacket(1, 0, "first"), encodePacket(-1, 2, ""), encodePacket(3, 0, "€")]);
+    const stream = Buffer.concat([
+      encodePacket(1, 0, "first"),
+      encodePacket(-1, 2, ""),
+      encodePacket(3, 0, "€"),
+    ]);
     const reader = new PacketReader();
     const packets = [];
     for (const byte of stream) {
       reader.push(Buffer.from([byte]));
       for (let packet; (packet = reader.read());) packets.push(packet);
     }
-    assert.deepEqual(packets.map((p) => [p.id, p.type, p.body.toString()]), [[1, 0, "first"], [-1, 2, ""], [3, 0, "€"]]);
+    assert.deepEqual(
+      packets.map((p) => [p.id, p.type, p.body.toString()]),
+      [
+        [1, 0, "first"],
+        [-1, 2, ""],
+        [3, 0, "€"],
+      ],
+    );
   });
 
   test("rejects impossible lengths", () => {

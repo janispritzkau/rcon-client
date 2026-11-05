@@ -10,7 +10,9 @@ const rcon = await Rcon.connect({
 console.log(await rcon.send("list"));
 
 // Commands run one at a time, in order, so Promise.all is safe.
-const replies = await Promise.all(["seed", "difficulty", "time query daytime"].map((c) => rcon.send(c)));
+const replies = await Promise.all(
+  ["seed", "difficulty", "time query daytime"].map((c) => rcon.send(c)),
+);
 console.log(replies);
 
 await rcon.end();
