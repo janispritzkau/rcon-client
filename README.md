@@ -161,6 +161,8 @@ Only setups that were actually tested are listed here.
 | Counter-Strike: Source | Tested, same results as HL2DM |
 | CS2, L4D2, TF2, Palworld, Rust, ARK, others | Not tested. Reports are welcome. |
 
+Servers that answer with a different packet id than the request, as reported for Conan Exiles in #21, are not supported. The client matches replies to commands by id, so commands on such servers time out.
+
 Runtimes: Node.js 22, 24 and 26 (both `import` and `require()`), Deno 2 and Bun 1.
 
 ## Maintenance
