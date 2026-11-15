@@ -56,4 +56,4 @@ CI runs the integration tests on every pull request, so you don't have to run al
 
 ## Releases
 
-Maintainers only. Bump `version` in `package.json`, commit, and push a matching `v*` tag. The release workflow stages the version on npm and creates a GitHub Release with generated notes. It becomes installable after `npm stage approve rcon-client@<version>`. Pre-release versions such as `5.0.0-beta.1` go to the `next` dist-tag.
+Maintainers only. Bump `version` in `package.json`, commit, and push a matching `v*` tag. The release workflow stages the version on npm and creates a GitHub Release with generated notes. It becomes installable after `npm stage approve <stage-id>`. The stage id is in the workflow's job summary and the release notes, and `npm stage list rcon-client` shows it too. Then edit the release notes, which only list the pull requests since the last tag. Pre-release versions such as `5.0.0-beta.1` go to the `next` dist-tag.
