@@ -1,8 +1,9 @@
 name: Release
 
 # A v* tag stages the version on npm through trusted publishing. It goes live
-# only after a maintainer runs `npm stage approve rcon-client@<version>` (with
-# 2FA). The trusted publisher on npm is configured to allow staging only.
+# only after a maintainer runs `npm stage approve <stage-id>` (with 2FA). The
+# stage id is in the job summary and the GitHub Release notes. The trusted
+# publisher on npm is configured to allow staging only.
 
 on:
   push:
@@ -39,12 +40,22 @@ jobs:
       - run: npm run build
       - run: npm run check:package
       - name: Stage on npm
+        id: stage
         run: |
+          set -o pipefail
           tag=$(node -p 'require("./package.json").version.includes("-") ? "next" : "latest"')
-          npm stage publish --provenance --access public --tag "$tag"
+          npm stage publish --provenance --access public --tag "$tag" 2>&1 | tee stage.log
+          id=$(grep -oE 'staged with id [0-9a-f-]{36}' stage.log | awk '{print $4}')
+          if [[ -z "$id" ]]; then
+            echo "::warning::Could not read the stage id. Find it with: npm stage list rcon-client"
+            id="<stage-id>"
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "Staged with tag \`$tag\`. Approve with \`npm stage approve $id\`." >> "$GITHUB_STEP_SUMMARY"
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          STAGE_ID: ${{ steps.stage.outputs.id }}
         run: |
           tag="$GITHUB_REF_NAME"
           if gh release view "$tag" > /dev/null 2>&1; then
@@ -53,7 +64,7 @@ jobs:
           fi
           flags=(--verify-tag --generate-notes)
           if [[ "$tag" == *-* ]]; then flags+=(--prerelease); fi
-          notes="Staged on npm. It becomes installable once a maintainer approves it with \`npm stage approve rcon-client@${tag#v}\`."
+          notes="Staged on npm. It becomes installable once a maintainer approves it with \`npm stage approve $STAGE_ID\`."
           delays=(10 30)
           for attempt in 1 2 3; do
             if gh release create "$tag" "${flags[@]}" --notes "$notes"; then
