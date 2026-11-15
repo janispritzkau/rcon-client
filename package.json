@@ -1,6 +1,6 @@
 {
   "name": "rcon-client",
-  "version": "5.0.0-beta.0",
+  "version": "5.0.0",
   "description": "A reliable RCON client for Minecraft and other Source RCON servers",
   "keywords": [
     "client",
